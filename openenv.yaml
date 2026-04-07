@@ -1,0 +1,16 @@
+spec_version: 1
+name: heat_treatment_scheduler
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+description: "An industrial process control environment for High-Entropy Alloy nanoprecipitate growth."
+author: "Mukund Kumar's team"
+tags: ["scheduling", "process-control", "physics-simulation"]
+tasks:
+  - name: "easy-bake"
+    description: "Hit a 14.0nm target with low thermal noise."
+  - name: "medium-bake"
+    description: "Hit a 12.0nm target with moderate thermal noise."
+  - name: "hard-bake"
+    description: "Hit an 14.5nm target under severe thermal noise."
