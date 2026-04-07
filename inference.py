@@ -60,10 +60,14 @@ from server.heat_treatment_scheduler_environment import HeatTreatmentSchedulerEn
 from models import HeatTreatmentSchedulerAction, R_MIN, R_MAX, TEMP_MAX
 
 IMAGE_NAME = os.getenv("IMAGE_NAME") # If you are using docker image 
-API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
+API_KEY = os.getenv("HF_TOKEN")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
+if API_KEY is None:
+    raise ValueError("API_KEY or HF_TOKEN environment variable is required")
+
 MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
+
 TASK_NAME = os.getenv("TASK_NAME", "medium-bake")
 BENCHMARK = os.getenv("BENCHMARK", "heat_treatment_scheduler")
 MAX_STEPS = 50
