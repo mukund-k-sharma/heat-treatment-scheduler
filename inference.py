@@ -60,7 +60,7 @@ from server.heat_treatment_scheduler_environment import HeatTreatmentSchedulerEn
 from models import HeatTreatmentSchedulerAction, R_MIN, R_MAX, TEMP_MAX
 
 IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME") # If you are using docker image 
-API_KEY = os.getenv("HF_TOKEN")
+API_KEY = os.getenv("HF_TOKEN") 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 
 if API_KEY is None:
@@ -235,7 +235,7 @@ def main() -> None:
         else:
             score = 0.0  # Failed constraints
             
-        score = min(max(score, 0.0), 1.0)  # clamp to [0, 1]
+        score = min(max(score, 0.01), 0.99)  # clamp to [0, 1]
         success = score >= SUCCESS_SCORE_THRESHOLD
 
     finally:
