@@ -25,7 +25,10 @@ from openenv.core.env_server.types import Action, Observation, State
 from pydantic import Field
 from typing import ClassVar
 
-from .logging_config import get_logger
+try:
+    from .logging_config import get_logger
+except (ImportError, ValueError, SystemError):
+    from logging_config import get_logger
 
 # Module logger
 logger = get_logger(__name__)
