@@ -18,8 +18,12 @@ from openenv.core import EnvClient
 from openenv.core.client_types import StepResult
 from openenv.core.env_server.types import State
 
-from .models import HeatTreatmentSchedulerAction, HeatTreatmentSchedulerObservation
-from .logging_config import get_logger
+try:
+    from .models import HeatTreatmentSchedulerAction, HeatTreatmentSchedulerObservation
+    from .logging_config import get_logger
+except (ImportError, ValueError, SystemError):
+    from models import HeatTreatmentSchedulerAction, HeatTreatmentSchedulerObservation
+    from logging_config import get_logger
 
 # Module logger
 logger = get_logger(__name__)

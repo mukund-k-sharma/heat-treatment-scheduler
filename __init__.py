@@ -34,9 +34,14 @@ Example:
     ...     result = env.step(action)
 """
 
-from .logging_config import get_logger
-from .client import HeatTreatmentSchedulerEnv
-from .models import HeatTreatmentSchedulerAction, HeatTreatmentSchedulerObservation
+try:
+    from .logging_config import get_logger
+    from .client import HeatTreatmentSchedulerEnv
+    from .models import HeatTreatmentSchedulerAction, HeatTreatmentSchedulerObservation
+except (ImportError, ValueError, SystemError):
+    from logging_config import get_logger
+    from client import HeatTreatmentSchedulerEnv
+    from models import HeatTreatmentSchedulerAction, HeatTreatmentSchedulerObservation
 
 # Module logger
 logger = get_logger(__name__)
