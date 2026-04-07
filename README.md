@@ -153,7 +153,7 @@ k(T) = A × exp(-E / (R × (T + 273.15)))
 
 Parameters:
 
-- A = 50 [reactions/second]
+- A = 1000 [reactions/second]
 - E = 120,000 [J/mol]
 - R = 8.314 [J/(mol·K)]
 - T [°C]
