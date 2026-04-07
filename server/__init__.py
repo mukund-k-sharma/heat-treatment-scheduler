@@ -15,9 +15,27 @@ Main Components:
     FastAPI application (app.py): HTTP server providing REST and WebSocket APIs
 """
 
-from ..logging_config import get_logger
-
-from .heat_treatment_scheduler_environment import HeatTreatmentSchedulerEnvironment
+try:
+    # Try relative imports first (normal Python package structure)
+    from ..logging_config import get_logger
+    from .heat_treatment_scheduler_environment import HeatTreatmentSchedulerEnvironment
+except (ImportError, ValueError, SystemError):
+    # Fallback for when relative imports fail:
+    # - ImportError: Module not found
+    # - ValueError: "attempted relative import beyond top-level package"
+    # - SystemError: Relative import issues in special contexts (Docker, etc.)
+    try:
+        from logging_config import get_logger
+        from heat_treatment_scheduler_environment import HeatTreatmentSchedulerEnvironment
+    except ImportError:
+        # Last resort: try importing from parent directory
+        import sys
+        import os
+        parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+        from logging_config import get_logger
+        from heat_treatment_scheduler_environment import HeatTreatmentSchedulerEnvironment
 
 # Module logger
 logger = get_logger(__name__)
