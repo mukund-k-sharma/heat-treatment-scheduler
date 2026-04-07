@@ -323,7 +323,6 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         # -----------------------------------
 
         self._reset_count += 1
-        self.step_count = 0
         self.step_count = 0  # Reset step counter for new episode
 
         # Restore initial conditions
@@ -514,7 +513,7 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         # Add Gaussian noise for realistic furnace/sensor noise
         noise_T = np.random.normal(0, self.sigma_T)  # ~N(0, sigma_T) °C
         # Update temperature with action + noise, clipped to [TEMP_MIN, TEMP_MAX]
-        self.T = np.clip(self.T + dT + noise_T, TEMP_MIN, TEMP_MAX)
+        self.T = np.clip(self.T + dT + noise_T, TEMP_MIN, TEMP_MAX) # type: ignore
         
         # ---- EARLY TERMINATION: MELTING CHECK ----
         # If temperature exceeds melting point, material is destroyed
