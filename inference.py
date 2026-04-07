@@ -59,21 +59,19 @@ from openai import OpenAI
 from server.heat_treatment_scheduler_environment import HeatTreatmentSchedulerEnvironment, AgentGrade
 from models import HeatTreatmentSchedulerAction, R_MIN, R_MAX, TEMP_MAX
 
-IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME") # If you are using docker image 
-API_KEY = os.getenv("HF_TOKEN") 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME") 
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 
 if API_KEY is None:
     raise ValueError("API_KEY or HF_TOKEN environment variable is required")
 
-MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
-
-TASK_NAME = os.getenv("TASK_NAME", "medium-bake")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 BENCHMARK = os.getenv("BENCHMARK", "heat_treatment_scheduler")
 MAX_STEPS = 50
 TEMPERATURE = 0.0
 MAX_TOKENS = 5
-SUCCESS_SCORE_THRESHOLD = 0.8  # normalized score in [0, 1]
+SUCCESS_SCORE_THRESHOLD = 0.8 
 
 SYSTEM_PROMPT = textwrap.dedent(
     """
@@ -125,7 +123,6 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
 def build_user_prompt(step: int, obs, last_reward: float, history: List[str]) -> str:
     history_block = "\n".join(history[-4:]) if history else "None"
     
-    # Denormalize observations to physical units
     current_time = obs.time * 180000 
     current_temp = obs.temperature * TEMP_MAX 
     current_r = obs.radius * R_MAX 
@@ -162,7 +159,6 @@ def get_model_message(client: OpenAI, step: int, obs, last_reward: float, histor
             stream=False,
         )
         text = (completion.choices[0].message.content or "").strip()
-        # Parse for digit 0-5
         match = re.search(r"[0-5]", text)
         return match.group(0) if match else "2"
     except Exception as exc:
@@ -170,18 +166,14 @@ def get_model_message(client: OpenAI, step: int, obs, last_reward: float, histor
         return "2"
 
 
-def main() -> None:
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-
-    # Map task names to environment configurations
+def run_single_task(task_name: str, client: OpenAI) -> None:
     TASK_CONFIG = {
         "easy-bake": {"difficulty": AgentGrade.EASY, "target": 14.0},
         "medium-bake": {"difficulty": AgentGrade.MEDIUM, "target": 12.0},
         "hard-bake": {"difficulty": AgentGrade.HARD, "target": 14.5},
     }
-    config = TASK_CONFIG.get(TASK_NAME, TASK_CONFIG["medium-bake"])
+    config = TASK_CONFIG.get(task_name, TASK_CONFIG["medium-bake"])
 
-    # Instantiate local environment matching the logic of previous working deployments
     env = HeatTreatmentSchedulerEnvironment(
         t=0.0, T=20.0, r=0.0, 
         r_target=config["target"], 
@@ -194,10 +186,10 @@ def main() -> None:
     score = 0.0
     success = False
 
-    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
+    log_start(task=task_name, env=BENCHMARK, model=MODEL_NAME)
 
     try:
-        obs = env.reset() # OpenENV.reset()
+        obs = env.reset() 
         last_reward = 0.0
 
         for step in range(1, MAX_STEPS + 1):
@@ -225,21 +217,29 @@ def main() -> None:
             if done:
                 break
 
-        # Calculate score [0, 1] based on target proximity
         final_temp = obs.temperature * TEMP_MAX  
         final_r = obs.radius * R_MAX  
         
         if final_temp < 1100 and final_r <= 15.0:
             proximity_error = abs(config["target"] - final_r)
-            score = max(0.0, 1.0 - (proximity_error / 5.0))
+            raw_score = 1.0 - (proximity_error / 5.0)
         else:
-            score = 0.0  # Failed constraints
+            raw_score = 0.0  
             
-        score = min(max(score, 0.01), 0.99)  # clamp to [0, 1]
+        score = max(0.01, min(raw_score, 0.99))  
         success = score >= SUCCESS_SCORE_THRESHOLD
 
     finally:
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+
+
+def main() -> None:
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    
+    tasks = ["easy-bake", "medium-bake", "hard-bake"]
+    
+    for task in tasks:
+        run_single_task(task, client)
 
 
 if __name__ == "__main__":
