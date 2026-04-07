@@ -69,9 +69,10 @@ try:
     from ..models import HeatTreatmentSchedulerAction, HeatTreatmentSchedulerObservation
     from .heat_treatment_scheduler_environment import HeatTreatmentSchedulerEnvironment
     from ..logging_config import get_logger
-except ModuleNotFoundError:
+except (ImportError, ValueError, SystemError, ModuleNotFoundError):
+    # Fallback for Docker/non-package context
     from models import HeatTreatmentSchedulerAction, HeatTreatmentSchedulerObservation
-    from server.heat_treatment_scheduler_environment import HeatTreatmentSchedulerEnvironment
+    from heat_treatment_scheduler_environment import HeatTreatmentSchedulerEnvironment
     from logging_config import get_logger
 
 # Module logger
