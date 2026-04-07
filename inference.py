@@ -59,7 +59,7 @@ from openai import OpenAI
 from server.heat_treatment_scheduler_environment import HeatTreatmentSchedulerEnvironment, AgentGrade
 from models import HeatTreatmentSchedulerAction, R_MIN, R_MAX, TEMP_MAX
 
-IMAGE_NAME = os.getenv("IMAGE_NAME") # If you are using docker image 
+IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME") # If you are using docker image 
 API_KEY = os.getenv("HF_TOKEN")
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 
