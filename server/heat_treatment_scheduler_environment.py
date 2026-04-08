@@ -836,7 +836,7 @@ class HeatTreatmentSchedulerEnvironment(Environment):
                 # SUCCESS: Achieved target radius within tolerance
                 # Bonus scales with proximity to target (Gaussian centered at target)
                 target_reward = 100.0 * np.exp(-(error ** 2) / 10.0)
-                # Base success bonus (+100) + proximity bonus (up to +100)
+                # Base success bonus (+100) + Gaussian proximity bonus (up to +100) + last-step reward (includes penalties)
                 return reward + target_reward + 100.0
             
             # FAILURE: Ended before reaching target
