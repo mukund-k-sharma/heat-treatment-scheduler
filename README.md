@@ -76,6 +76,20 @@ docker build -t heat_treatment_scheduler_env:latest .
 docker run -p 8000:8000 heat_treatment_scheduler_env:latest
 ```
 
+### Running the Hackathon Agent
+
+To evaluate the LLM agent against the environment, run the inference script. The script requires access to an OpenAI-compatible endpoint and evaluates all three task difficulties (easy, medium, hard).
+
+```bash
+# Set the required environment variables (prioritizes API_KEY for proxy routing)
+export API_BASE_URL="[https://router.huggingface.co/v1](https://router.huggingface.co/v1)"
+export API_KEY="your_injected_proxy_key"
+export MODEL_NAME="Qwen/Qwen2.5-72B-Instruct"
+
+# Run the agent evaluation
+python inference.py
+```
+
 ## How It Works
 
 ### The Physics
