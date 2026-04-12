@@ -64,7 +64,11 @@ class AlloyProperties(BaseModel):
 
 def load_alloy_registry() -> Dict[str, AlloyProperties]:
     """
-    Loads and validates the materials configuration file.
+    Loads and validates the materials configuration file (`materials.json`).
+    
+    This configuration file contains the physical properties (density, specific heat, 
+    melting temperature, Arrhenius constants, oxidation constants) for various 
+    metal alloys, allowing the environment to simulate different materials dynamically.
     """
 
     config_path = Path(__file__).parent / "materials.json"
@@ -113,6 +117,14 @@ class HardwareProperties(BaseModel):
 
 
 def load_hardware_registry() -> Dict[str, HardwareProperties]:
+    """
+    Loads and validates the hardware configuration file (`hardware.json`).
+    
+    This configuration file defines different furnace geometries and properties 
+    (like radius, height, and the base convective heat transfer coefficient `base_h`), 
+    allowing the environment to simulate various real-world hardware setups ranging 
+    from small lab samples to massive industrial castings.
+    """
     config_path = Path(__file__).parent / "hardware.json"
 
     try:
@@ -140,6 +152,8 @@ TIME_MAX: float = 180_000.0 # 50 hours
 Maximum allowed time in oven: 50 hours = 180,000 seconds.
 Episode ends if time exceeds this value.
 """
+
+
 # ======================== ACTION SPACE ========================
 
 class HeatTreatmentSchedulerAction(Action):
@@ -180,26 +194,26 @@ class HeatTreatmentSchedulerAction(Action):
     # ---- Physics Context ----
     # Temperature regimes and their effects on precipitate growth:
     #
-    # Below 400°C (Frozen Phase):
+    # Below 0.35 * temp_melt (Frozen Phase):
     #   - Atomic diffusion is negligible
     #   - Precipitate radius remains essentially constant
     #   - Growth rate dr/dt ≈ 0
     #
-    # 400°C to 750°C (Controlled Growth Phase):
+    # 0.35 * temp_melt to 0.68 * temp_melt (Controlled Growth Phase):
     #   - Diffusion-controlled growth regime
     #   - Growth rate increases with temperature (Arrhenius equation)
     #   - dr/dt = k(T) * (1 - r/R_max)
     #   - Growth slows as radius approaches R_max (saturation effect)
     #   - **SWEET SPOT**: Agent can reach target radius here
     #
-    # 750°C to 1100°C (Ostwald Ripening Phase):
+    # 0.68 * temp_melt to temp_melt (Ostwald Ripening Phase):
     #   - High-temperature grain coarsening begins
     #   - Larger precipitates grow at expense of smaller ones
     #   - Growth rate: dr/dt = k(T) * (r/R_max)
     #   - Material becomes brittle and overcoarsened
     #   - Episode fails if radius exceeds R_max
     #
-    # Above 1100°C (Melting/Destruction Phase):
+    # Above temp_melt (Melting/Destruction Phase):
     #   - Material begins melting and crystalline structure breaks down
     #   - Large negative reward and episode termination
     #   - Represent catastrophic process failure
@@ -216,14 +230,14 @@ class HeatTreatmentSchedulerObservation(Observation):
     
     Attributes:
         time: Normalized elapsed time (t / TIME_MAX). Range: [0, 1]
-        temperature: Normalized oven temperature (T / TEMP_MAX). Range: [0, 1]
-        radius: Normalized current precipitate radius (r / R_MAX). Range: [0, 1]
-        target_radius: Normalized target radius (r_target / R_MAX). Range: [0, 1]
-        radius_error: Deviation from target: (r - r_target) / R_MAX. Range: [-1, 1]
+        temperature: Normalized material core temperature (T / alloy.temp_max). Range: [0, 1]
+        radius: Normalized current precipitate radius (r / alloy.r_max_clip). Range: [0, 1]
+        target_radius: Normalized target radius (r_target / alloy.r_max_clip). Range: [0, 1]
+        radius_error: Deviation from target: (r - r_target) / alloy.r_max_clip. Range: [-1, 1]
         temperature_phase: Categorical phase indicator. Values:
-            - 0.0: Frozen phase (T < 400°C) - no growth
-            - 1.0: Growth phase (400 ≤ T ≤ 750°C) - controlled growth
-            - 2.0: Ripening phase (T > 750°C) - dangerous coarsening
+            - 0.0: Frozen phase (T < 0.35 * temp_melt) - no growth
+            - 1.0: Growth phase (0.35 * temp_melt ≤ T ≤ 0.68 * temp_melt) - controlled growth
+            - 2.0: Ripening phase (T > 0.68 * temp_melt) - dangerous coarsening
         remaining_time: Normalized time left: (TIME_MAX - t) / TIME_MAX. Range: [0, 1]
         done: Boolean flag. True if episode ended (success or failure).
         reward: Scalar reward value. Shaped to guide agent toward optimal policy.
@@ -232,7 +246,7 @@ class HeatTreatmentSchedulerObservation(Observation):
     
     # Core state observations (normalized to [0, 1])
     time: float = Field(description="Normalized elapsed time in oven: t / TIME_MAX")
-    temperature: float = Field(description="Normalized oven temperature: T / alloy.temp_max")
+    temperature: float = Field(description="Normalized material core temperature: T / alloy.temp_max")
     radius: float = Field(description="Normalized average radius of nanoprecipitates: r / alloy.r_max_clip")
     target_radius: float = Field(description="Normalized target precipitate radius: r_target / alloy.r_max_clip")
     radius_error: float = Field(description="Distance from target (normalized): (r - r_target) / alloy.r_max_clip")
@@ -242,9 +256,9 @@ class HeatTreatmentSchedulerObservation(Observation):
         default=0,
         description=(
             "Temperature regime indicator (categorical as float):\n"
-            "  0.0 = Frozen phase (T < 400°C)\n"
-            "  1.0 = Growth phase (400°C ≤ T ≤ 750°C)\n"
-            "  2.0 = Ripening phase (T > 750°C)"
+            "  0.0 = Frozen phase (T < 0.35 * temp_melt)\n"
+            "  1.0 = Growth phase (0.35 * temp_melt ≤ T ≤ 0.68 * temp_melt)\n"
+            "  2.0 = Ripening phase (T > 0.68 * temp_melt)"
         )
     )
     

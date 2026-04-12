@@ -4,10 +4,11 @@ Heat Treatment Scheduler Inference Script for OpenEnv Hackathon.
 This script demonstrates how to run an LLM-based agent on the Heat Treatment Scheduler
 environment and report results in the standardized OpenEnv format.
 
-The agent uses an LLM to decide which temperature control action (0-5) to execute at each
-step, attempting to grow nanoprecipitates to a target radius while managing thermal process
-constraints. Success requires reaching target radius (10-15 nm) without melting (>1100°C)
-or over-coarsening (>15 nm).
+The agent uses an LLM to decide which temperature control action (0-5) and duration to 
+execute at each step, attempting to grow nanoprecipitates to a target radius while 
+managing continuous thermodynamics and kinetics. Success requires reaching the dynamic 
+target radius (loaded from materials.json) without melting the material (T >= T_melt) 
+or over-coarsening (r > r_target_max).
 
 Environment Requirements:
     API_BASE_URL         - OpenAI-compatible API endpoint (default: https://api.openai.com/v1)
@@ -82,22 +83,22 @@ SYSTEM_PROMPT = textwrap.dedent(
     You are an expert Metallurgical Process Engineer controlling a precipitation hardening furnace.
 
     Your objective: Grow nanoprecipitates to the exact target radius without melting the material or triggering Ostwald ripening. 
-    You must account for the specific thermal mass of the hardware and the oxidation rates of the alloy.
+    You must account for the specific thermal mass of the hardware (which creates lag in heating/cooling) and the oxidation buildup on the alloy surface (which acts as an insulator, reducing heat transfer efficiency over time).
 
-    You must output exactly TWO numbers separated by a comma: [Action, Duration]
+    You must output exactly TWO numbers separated by a comma: [Action_Num, Duration_Minutes]
     
-    ACTION (0-5):
+    ACTION_NUM (0-5):
         0: Aggressive cooling (-50°C)
         1: Gentle cooling (-10°C)
-        2: Hold temperature (0°C - no change)
+        2: Hold furnace temperature (0°C change)
         3: Gentle heating (+10°C)
         4: Aggressive heating (+50°C)
         5: TERMINATE EPISODE (Use only when Current Radius is within the Target Radius bounds)
 
-    DURATION:
-        The number of minutes to hold this state (between 1 and 600).
+    DURATION_MINUTES:
+        The number of minutes to hold this furnace state (between 1.0 and 600.0).
         Example 1: "4, 120" means aggressive heat for 2 hours.
-        Example 2: "2, 15" means hold temperature for 15 minutes.
+        Example 2: "2, 15" means maintain current furnace temp for 15 minutes.
 
     Respond with ONLY the two numbers separated by a comma. No text, no markdown.
     """

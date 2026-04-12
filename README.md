@@ -21,13 +21,15 @@ A physics-informed reinforcement learning environment for optimizing the precipi
 
 ## What is This?
 
-You control an industrial furnace to grow nanoprecipitates to a target size in a metal alloy. The challenge: reach the target radius without:
+You control an industrial furnace to grow nanoprecipitates to a target size in a metal alloy. The challenge is multi-dimensional. You must reach the target radius without:
 
-- **Melting** the material (T ≥ 1100°C) → -200 reward
-- **Over-coarsening** the material (r > 15 nm) → -100 reward  
-- **Wasting time/energy** (high temperature) → continuous penalty
+- **Melting** the material (T ≥ T_melt) → Catastrophic -200 reward
+- **Over-coarsening** the material (r > r_target_max) → -100 reward  
+- **Wasting time/energy** (high temperatures and long durations) → Continuous penalty.
 
-Success (10 nm ≤ r ≤ 15 nm) → +100 to +200 reward
+Furthermore, you must manage **thermal mass** (sluggish heating/cooling based on the hardware geometry) and **oxidation build-up** (which acts as an insulator, reducing the effective heat transfer over time).
+
+Success (r_target_min ≤ r ≤ r_target_max) → +100 to +200 reward (scaled by proximity)
 
 ## Quick Start
 
@@ -49,10 +51,10 @@ obs = result.observation
 
 # Run 100-step episode
 for step in range(100):
-    action = HeatTreatmentSchedulerAction(action_num=3)  # Heat +10°C
+    action = HeatTreatmentSchedulerAction(action_num=3, duration_minutes=60.0)  # Heat +10°C for 1 hour
     result = env.step(action)
     
-    print(f"Step {step}: T={obs.temperature*1200:.0f}°C, r={obs.radius*15:.2f}nm, reward={result.reward:.2f}")
+    print(f"Step {step}: T_norm={obs.temperature:.2f}, r_norm={obs.radius:.2f}, reward={result.reward:.2f}")
     if result.done:
         break
 
@@ -94,68 +96,83 @@ python inference.py
 
 ### The Physics
 
-The environment simulates four thermal regimes controlling precipitate growth:
+The environment simulates continuous thermodynamics and kinetics of nanoprecipitate growth in metal alloys. The physical model is broken down into three main components: heat transfer, oxidation kinetics, and precipitate growth.
 
-| Regime | Temperature | Growth Rate | Physics | Strategy |
-|--------|-------------|-------------|---------|----------|
-| **Frozen** | T < 400°C | dr/dt = 0 | No diffusion | Waste of energy, skip it |
-| **Growth** | 400-750°C | dr/dt = k(T)·(1-r/R_MAX) | Diffusion-controlled, saturation | **SWEET SPOT** - where you win |
-| **Ripening** | 750-1100°C | dr/dt = k(T)·(r/R_MAX) | Grain coarsening, positive feedback | Failure zone - avoid! |
-| **Melting** | >1100°C | — | Material destruction | Game over |
+#### 1. Heat Transfer (Newton's Law of Cooling)
 
-Where **R_MAX = 15 nm** (maximum radius). The saturation factor (1 - r/R_MAX) naturally slows growth in the Growth phase as the radius approaches the target.
+The furnace temperature (`T_furnace`) changes instantaneously when the agent takes an action, but the material's core temperature (`T_material`) follows a continuous differential equation based on Newton's Law of Cooling:
 
-**Arrhenius Equation** (how growth rate changes with temperature):
-$$k(T) = A \times \exp\left(-\frac{E}{R(T+273.15)}\right)$$
+$$ \frac{dT_{material}}{dt} = \frac{h(t) \cdot A_{surface} \cdot (T_{furnace} - T_{material})}{m \cdot C_p} $$
 
 Where:
 
-- `k(T)` is the temperature-dependent growth-rate constant
-- `A` is the pre-exponential factor
-- `E` is the activation energy
-- `R` is the universal gas constant
-- `T` is the furnace temperature in `°C`
-- `273.15` converts Celsius to Kelvin
+- `m` (mass) is calculated dynamically from the alloy's density.
+- `C_p` is the specific heat capacity loaded from `materials.json`.
+- `h(t)` is the effective Heat Transfer Coefficient. This decays over time as surface oxidation builds up at high temperatures, acting as an insulator.
 
-In this environment implementation, the code uses:
+#### 2. Oxidation Kinetics (Arrhenius)
 
-- `R = 8.314 J/(mol·K)`
-- `A = 1000 s^-1`
-- `E = 120 kJ/mol`
-- `T` in `°C`
+The oxidation factor (`ox`), representing the insulation layer, grows based on the material's core temperature using Arrhenius kinetics:
 
-These are model constants for the benchmark, **not universal material constants**.
+$$ \frac{d(ox)}{dt} = A_{ox} \cdot \exp\left(-\frac{E_{ox}}{R(T_{material} + 273.15)}\right) \cdot (0.8 - ox) $$
 
-For real systems:
+Where:
 
-- **R** is fixed at **8.314 J/(mol·K)**
-- **A** is material- and mechanism-dependent, and often falls in the range **10^7 to 10^13 s^-1**
-- **E** is material- and process-dependent, and often falls in the range **50 to 300 kJ/mol**
+- `A_ox` and `E_ox` are the pre-exponential factor and activation energy for oxidation, loaded from `materials.json`.
+- The term `(0.8 - ox)` acts as a saturation term, capping the insulation effect at 80%. As the oxide layer thickens, its growth slows down.
 
-### Action Space (6 Discrete Actions)
+#### 3. Precipitate Growth (Arrhenius + Phase Thresholds)
 
-```text
-0: Aggressive cooling   (-50°C)
-1: Gentle cooling       (-10°C)
-2: Hold steady          ( 0°C)
-3: Gentle heating       (+10°C)
-4: Aggressive heating   (+50°C)
-5: Terminate episode
-```
+The base reaction rate `k(T)` for precipitate growth is driven by the Arrhenius equation:
 
-**Note**: Action 5 is a terminal action and does not map to temperature change.
+$$ k(T) = A \cdot \exp\left(-\frac{E}{R(T_{material} + 273.15)}\right) $$
+
+Where:
+
+- `A` is the pre-exponential factor and `E` is the activation energy for precipitate growth (from `materials.json`).
+- `R` is the universal gas constant (8.314 J/(mol·K)).
+
+The actual growth rate `dr/dt` is determined by the current thermal regime relative to the alloy's melting temperature (`T_melt`):
+
+| Regime | Temperature Range | Growth Rate (`dr/dt`) | Physics |
+| -------- | ------------------- | ----------------------- | --------- |
+| **Frozen** | T < 0.35 * T_melt | 0 | Atomic diffusion is negligible. Material remains in initial microstructure. |
+| **Growth** | 0.35-0.68 * T_melt | $k(T) \cdot (1 - \frac{r}{R_{MAX}})$ | Diffusion-controlled. Rate-limiting factor: atomic diffusion in the solid. The **SWEET SPOT**. |
+| **Ripening**| 0.68-1.0 * T_melt | $k(T) \cdot (\frac{r}{R_{MAX}})$ | Grain coarsening (Ostwald ripening). Material becomes brittle and loses mechanical properties. |
+| **Melting**| T ≥ T_melt | 0 | Material breaks down. Crystalline structure dissolves. Episode terminates. |
+
+Where **R_MAX** is the maximum target radius of the material. The saturation factor $(1 - r/R_{MAX})$ naturally slows growth in the Controlled Growth phase as the radius approaches the target.
+
+In this environment implementation, the physics constants are loaded dynamically based on the chosen alloy in `materials.json` and hardware setup in `hardware.json`.
+
+### Action Space
+
+The action space consists of two components:
+
+1. **`action_num`** (Discrete, 0-5): The temperature control strategy.
+
+   ```text
+   0: Aggressive cooling   (-50°C)
+   1: Gentle cooling       (-10°C)
+   2: Hold steady          (  0°C)
+   3: Gentle heating       (+10°C)
+   4: Aggressive heating   (+50°C)
+   5: Terminate episode    (End early)
+   ```
+
+2. **`duration_minutes`** (Continuous, 1.0 to 600.0): How long to hold this new furnace state. This directly influences the underlying continuous differential equations.
 
 ### Observation Space (7 Values, All Normalized [0,1])
 
 | Field | Meaning | Range |
 | ------- | --------- | ------- |
-| `time` | Elapsed time / (TIME_MAX=180,000s) | [0, 1] |
-| `temperature` | Current Oven temp / (TEMP_MAX=1200°C) | [0, 1] |
-| `radius` | Current radius/ (RADIUS_MAX=15 nm) | [0, 1] |
-| `target_radius` | Target radius / (RADIUS_MAX = 15 nm) | [0, 1] |
-| `radius_error` | (current radius - target radius) / (RADIUS_MAX=15 nm) | [-1, 1] |
+| `time` | Elapsed time / TIME_MAX (180,000s) | [0, 1] |
+| `temperature` | Current material core temp / alloy.temp_max | [0, 1] |
+| `radius` | Current radius / alloy.r_max_clip | [0, 1] |
+| `target_radius` | Target radius / alloy.r_max_clip | [0, 1] |
+| `radius_error` | (current radius - target radius) / alloy.r_max_clip | [-1, 1] |
 | `temperature_phase` | Regime indicator | 0=Frozen, 1=Growth, 2=Ripening |
-| `remaining_time` | Time left / (TIME_MAX=180,000s) | [0, 1] |
+| `remaining_time` | Time left / TIME_MAX | [0, 1] |
 
 ### Reward Function
 
@@ -198,6 +215,30 @@ AgentGrade.HARD      # σ_T=7°C, σ_r=5%, σ_t=8%     (Challenging)
 
 **Recommended training path**: EASY → MEDIUM → HARD
 
+### Material Configuration (`materials.json`)
+
+The environment supports different metal alloys, each with their own unique physical constants (e.g., melting point, density, specific heat capacity, Arrhenius and oxidation kinetic constants). These are defined in `materials.json`.
+
+Available alloy keys:
+
+- `Al_96_Cu_4` (Aluminum 2024 - Default)
+- `Al_98_Cu_2` (Aluminum Al-2wt%Cu)
+- `Ti_6Al_4V` (Titanium Grade 5)
+- `Mg_AZ31B` (Magnesium AZ31B)
+- `Fe_99_C_1` (High-Carbon Steel 1095)
+- `inconel_718` (Inconel 718)
+- `cantor_equiatomic` (Cantor Alloy)
+
+### Hardware Configuration (`hardware.json`)
+
+The environment simulates different furnace and sample geometries, which affect the thermal mass and heat transfer rates (Newton's Law of Cooling). These setups are defined in `hardware.json`.
+
+Available hardware keys:
+
+- `industrial_standard` (Standard medium-weight billet - Default)
+- `lab_scale` (Small sample, low thermal mass)
+- `massive_casting` (Huge thermal mass, extremely sluggish response)
+
 ### Create an Environment
 
 ```python
@@ -207,8 +248,9 @@ env = HeatTreatmentSchedulerEnvironment(
     t=0.0,             # Initial time (seconds)
     T=350.0,           # Initial temperature (°C)
     r=0.5,             # Initial radius (nm)
-    r_target=12.5,     # Target radius (nm). Must be 10-15.
-    difficulty=AgentGrade.MEDIUM
+    difficulty=AgentGrade.MEDIUM,
+    alloy_key="Al_96_Cu_4",            # Loads from materials.json
+    hardware_key="industrial_standard" # Loads from hardware.json
 )
 obs = env.reset()
 action_result = env.step(HeatTreatmentSchedulerAction(action_num=3))
@@ -282,20 +324,19 @@ Every degree Celsius (relative to action) adds cost. This encourages using the o
 | Parameter | Min | Max | Unit |
 | ----------- | ----- | ----- | ------ |
 | Time | 0 | 180,000 | seconds (50 hours max) |
-| Temperature | 0 | 1,200 | °C (clipped) |
-| Radius (clipped) | 0 | 30 | nm |
-| Target Radius (must set) | 10 | 15 | nm |
+| Temperature | 0 | alloy.temp_max | °C (clipped) |
+| Radius (clipped) | 0 | alloy.r_max_clip | nm |
+| Target Radius | alloy.r_target_min | alloy.r_target_max | nm |
 
 ## Expected Behavior
 
-Trained agents typically learn:
+Trained agents typically learn to manage the continuous physics engine by:
 
-1. **Quick heat-up** (steps 1-3): Move from 350°C → growth phase
-2. **Growth management** (steps 4-50): Maintain T in sweet spot (500-700°C)
-3. **Precision control**: Hold temperature to let saturation naturally slow growth
-4. **Timely exit**: Terminate when r reaches target (within 10-15 nm range)
-
-Total optimal episode: ~30-50 steps at MEDIUM difficulty, earning ~150-200 reward.
+1. **Quick heat-up**: Provide aggressive heating actions with appropriate durations to overcome thermal mass and reach the growth phase.
+2. **Growth management**: Maintain material temperature in the sweet spot (0.35 - 0.68 * T_melt).
+3. **Oxidation mitigation**: Limit unnecessary time at extremely high temperatures to prevent runaway insulation buildup.
+4. **Precision control**: Hold temperature to let saturation naturally slow growth.
+5. **Timely exit**: Call the termination action when the radius is within the target bounds.
 
 ## Deployment
 
@@ -346,7 +387,7 @@ server/
 
 ### Project Structure
 
-```
+```text
 heat_treatment_scheduler/
 ├── __init__.py
 ├── client.py              # Client (EnvClient subclass)
@@ -388,19 +429,19 @@ All observations normalized to [0, 1] for stable neural network training.
 
 | Issue | Cause | Fix |
 | ------- | ------- | ----- |
-| Agent stuck below 400°C | Frozen phase feels "safe" | Increase initial temperature or growth reward |
-| Quick death (melting) | Overshoot in early training | Lower aggressive heating costs or add gradient penalty |
-| No growth | Incorrect phase logic | Check temperature_phase computation in `_get_obs()` |
+| Agent stuck below 0.35 * T_melt | Frozen phase feels "safe" | Increase initial temperature or growth reward |
+| Quick death (melting) | Overshoot in early training | Anticipate thermal mass lag, don't heat aggressively too long |
+| Agent cannot heat up late game | Severe oxidation buildup | Lower the time spent at high temperature |
+| No growth | Incorrect phase logic | Check temperature_phase computation |
 | Slow convergence | Large state space | Use curriculum learning (EASY → MEDIUM → HARD) |
-| Reward scale issues | Mismatched time constants | Verify time_penalty coefficient (0.00028) |
 
 ## Common Questions
 
 **Q: What's the optimal strategy?** \
-A: Heat quickly to 500-600°C, maintain steady temp, let saturation slow growth naturally, exit when r = target.
+A: Heat aggressively at first to overcome thermal mass, back off before overshooting T_melt, maintain steady temp in the growth phase, let saturation slow growth naturally, and exit when r = target.
 
 **Q: Can I change the physics?** \
-A: Yes! Modify constants (A, E, thresholds) in `HeatTreatmentSchedulerEnvironment` and `models.py`.
+A: Yes! Modify physical constants (A, E, melting points, etc.) in `materials.json` and `hardware.json`. To change the underlying differential equations or thermal regimes, modify `server/heat_treatment_scheduler_environment.py`.
 
 **Q: How do I use this with PyTorch/TensorFlow?** \
 A: The client returns `HeatTreatmentSchedulerObservation` (7-float tuple). Convert with:

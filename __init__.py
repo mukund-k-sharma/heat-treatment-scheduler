@@ -20,17 +20,22 @@ Core Components:
     - HeatTreatmentSchedulerObservation: Observation space (current state metrics)
 
 Physics Model:
-    The environment implements a four-phase growth model:
-    1. Frozen Phase (<400°C): No growth, zero precipitate growth rate
-    2. Growth Phase (400-750°C): Diffusion-controlled growth following Arrhenius equation
-    3. Ripening Phase (>750°C): Ostwald ripening with exponential coarsening
-    4. Melting (>1100°C): Material destruction
+    The environment implements a four-phase growth model relative to the alloy's melting 
+    point (T_melt), which includes continuous thermodynamics:
+    1. Frozen Phase (<0.35 * T_melt): No growth, atomic diffusion is negligible.
+    2. Growth Phase (0.35-0.68 * T_melt): Diffusion-controlled growth following Arrhenius equation.
+    3. Ripening Phase (0.68-1.0 * T_melt): Ostwald ripening with grain coarsening failure.
+    4. Melting Phase (>= T_melt): Material destruction and catastrophic failure.
+
+    Additionally, the model simulates thermal mass (heating/cooling lag) via Newton's Law 
+    of Cooling and insulation buildup via oxidation kinetics.
 
 Example:
     >>> from heat_treatment_scheduler import HeatTreatmentSchedulerEnv, HeatTreatmentSchedulerAction
     >>> with HeatTreatmentSchedulerEnv(base_url="http://localhost:8000") as env:
     ...     obs = env.reset()
-    ...     action = HeatTreatmentSchedulerAction(action_num=3)  # Increase temp by 10°C
+    ...     # Increase temp by 10°C and hold for 60 minutes
+    ...     action = HeatTreatmentSchedulerAction(action_num=3, duration_minutes=60.0) 
     ...     result = env.step(action)
 """
 
