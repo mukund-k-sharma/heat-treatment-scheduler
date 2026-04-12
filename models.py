@@ -21,9 +21,13 @@ Physics Context:
     The physics is governed by four regimes based on temperature.
 """
 
+import json
+from pathlib import Path
+
+from openai import BaseModel
 from openenv.core.env_server.types import Action, Observation, State
 from pydantic import Field
-from typing import ClassVar
+from typing import ClassVar, Dict
 
 try:
     from .logging_config import get_logger
@@ -34,37 +38,108 @@ except (ImportError, ValueError, SystemError):
 logger = get_logger(__name__)
 logger.debug("Heat Treatment Scheduler models module loaded")
 
-# ======================== BOUNDARY CONDITIONS ========================
+
+# ======================== MATERIAL REGISTRY ========================
+
+class AlloyProperties(BaseModel):
+    """
+    Defines the physical constants and boundary limits for a specific material
+    """
+    name: str = Field(description="Display name of the alloy")
+    composition_wt: Dict[str, float] = Field(description="Weight percentage of elemental composition")
+    density_g_cm3: float = Field(description="Material density in g/cm^3")
+    specific_heat_capacity : float = Field(description="Specific heat capacity (C_p) in J/(kg * K)")
+    A: float = Field(description="Pre-exponential factor for Arrhenius equation (reactions/s)")
+    E: float = Field(description="Activation energy for Arrhenius equation (J/mol)")
+    temp_melt: float = Field(description="Melting temperature in Celsius (catastropic failure point)")
+    temp_max : float = Field(description="Absolute max temperature for neural network normalization")
+    r_target_min: float = Field(description="Minimum target radius for success (nm)")
+    r_target_max : float = Field(description="Maximum target radius for success (nm)")
+    r_max_clip: float = Field(description="Absolute max radius for neural network normalization")
+
+    # Oxidation kinetics
+    A_ox: float = Field(description="Pre-exponential factor for Oxidation (1/s)")
+    E_ox: float = Field(description="Activation energy for Oxidation (J/mol).")
+
+
+def load_alloy_registry() -> Dict[str, AlloyProperties]:
+    """
+    Loads and validates the materials configuration file.
+    """
+
+    config_path = Path(__file__).parent / "materials.json"
+
+    try:
+        with open(config_path, "r") as f:
+            data = json.load(f)
+
+        registry = {}
+
+        # Parsing: Series --> AlloyKey --> Properties
+        for series_name, alloys in data.items():
+            for key, props in alloys.items():
+                registry[key] = AlloyProperties(**props)
+
+        logger.info(f"Successfully loaded {len(registry)} materials into the registry.")
+        return registry
+    except FileNotFoundError:
+        logger.error(f"Count not file materials config at {config_path}")
+        raise
+    except Exception as e:
+        logger.error(f"Failed to parse materials config : {e}")
+        raise
+
+
+
+# Initialize the global registry
+ALLOY_REGISTRY = load_alloy_registry()
+
+#========================= HARDWARE PROPERTIES ===============================
+
+class HardwareProperties(BaseModel):
+    """
+    Define the extrinsic geometric and thermodynamic properties fo the setup.
+    """
+    # Geometric properties (billet)
+    name : str = Field(description="Display name of hardware setup.")
+    radius_m: float = Field(description="Radius of the cylinderical billet in meters.", gt=0.0)
+    height_m: float = Field(description="Height of cylindrical billet in meters", gt=0.0)
+
+    # Thermodynamic properties (billet)
+    base_h: float = Field(description="Base convective heat transfer coefficient. (W/m^2 * K)", gt=0.0)
+
+    # General
+    description: str = Field(description="Contextual description of the thermal dynamics.")
+
+
+def load_hardware_registry() -> Dict[str, HardwareProperties]:
+    config_path = Path(__file__).parent / "hardware.json"
+
+    try:
+        with open(config_path, "r") as f:
+            data = json.load(f)
+
+        return {k: HardwareProperties(**v) for k, v in data.items()}
+    except Exception as e:
+        logger.error(f"Failed to parse hardware config: {e}")
+        raise
+
+
+HARDWARE_REGISTRY = load_hardware_registry()
+
+
+# ======================== GLOBAL BOUNDARY CONDITIONS ========================
 # These constants define the valid ranges for the heat treatment process.
 # Values outside these ranges result in episode termination or state clipping.
 
 TIME_MIN: float = 0.0
 """Minimum elapsed time (seconds). Typically unused as time only increases."""
 
-TIME_MAX: float = 180_000.0
+TIME_MAX: float = 180_000.0 # 50 hours
 """
 Maximum allowed time in oven: 50 hours = 180,000 seconds.
 Episode ends if time exceeds this value.
 """
-
-TEMP_MIN: float = 0.0
-"""Minimum oven temperature (Celsius). Temperature is clipped to this lower bound."""
-
-TEMP_MAX: float = 1_200.0
-"""
-Maximum oven temperature (Celsius). Temperature is clipped to this upper bound.
-Critical: Above ~1100°C, material begins melting and is destroyed.
-"""
-
-R_MIN: float = 10.0
-"""Minimum target precipitate radius (nanometers). Success range lower bound."""
-
-R_MAX: float = 15.0
-"""
-Maximum target precipitate radius (nanometers). Success range upper bound.
-Episode ends if radius exceeds this value (Ostwald ripening failure).
-"""
-
 # ======================== ACTION SPACE ========================
 
 class HeatTreatmentSchedulerAction(Action):
@@ -83,12 +158,10 @@ class HeatTreatmentSchedulerAction(Action):
     """
     
     # Instance variable holding the selected action
-    action_num: int = Field(
-        ...,
-        description="0-5 discrete temperature control actions",
-        ge=0,
-        le=5
-    )
+    action_num: int = Field(description="0-5 discrete temperature control actions", le=5)
+    # Hold a temperature: min = 1 minute (micro-adjustments) and max: 10 hours per step
+    duration_minutes: float = Field(default=60.0, description="Duration to hold this temperature state in minutes.", ge=1.0, le=600.0)
+
     
     # ---- Action Mapping ----
     # Maps action_num to temperature change (dT in °C)
@@ -158,31 +231,11 @@ class HeatTreatmentSchedulerObservation(Observation):
     """
     
     # Core state observations (normalized to [0, 1])
-    time: float = Field(
-        ...,
-        description="Normalized elapsed time in oven: t / TIME_MAX"
-    )
-    
-    temperature: float = Field(
-        ...,
-        description="Normalized oven temperature: T / TEMP_MAX"
-    )
-    
-    radius: float = Field(
-        ...,
-        description="Normalized average radius of nanoprecipitates: r / R_MAX"
-    )
-    
-    # Goal and error tracking
-    target_radius: float = Field(
-        ...,
-        description="Normalized target precipitate radius: r_target / R_MAX"
-    )
-    
-    radius_error: float = Field(
-        ...,
-        description="Distance from target (normalized): (r - r_target) / R_MAX"
-    )
+    time: float = Field(description="Normalized elapsed time in oven: t / TIME_MAX")
+    temperature: float = Field(description="Normalized oven temperature: T / alloy.temp_max")
+    radius: float = Field(description="Normalized average radius of nanoprecipitates: r / alloy.r_max_clip")
+    target_radius: float = Field(description="Normalized target precipitate radius: r_target / alloy.r_max_clip")
+    radius_error: float = Field(description="Distance from target (normalized): (r - r_target) / alloy.r_max_clip")
     
     # Phase indicator for interpretability
     temperature_phase: float = Field(
@@ -195,11 +248,7 @@ class HeatTreatmentSchedulerObservation(Observation):
         )
     )
     
-    # Time pressure signal
-    remaining_time: float = Field(
-        ...,
-        description="Normalized time remaining: (TIME_MAX - t) / TIME_MAX"
-    )
+    remaining_time: float = Field(description="Normalized time remaining: (1 - (t / TIME_MAX)")
 
 # ======================== STATE SPACE ========================
 
@@ -221,23 +270,7 @@ class HeatTreatmentSchedulerState(State):
         target_radius: Desired precipitate radius in nanometers.
     """
     
-    time: float = Field(
-        ...,
-        description="Current elapsed time in the oven (seconds)"
-    )
-    
-    temperature: float = Field(
-        ...,
-        description="Current oven temperature (degrees Celsius)"
-    )
-    
-    radius: float = Field(
-        ...,
-        description="Current average radius of nanoprecipitates (nanometers)",
-        ge=0.0  # Radius must be non-negative
-    )
-    
-    target_radius: float = Field(
-        ...,
-        description="Target radius for nanoprecipitates (nanometers)"
-    )
+    time: float = Field(description="Current elapsed time in the oven (seconds)")
+    temperature: float = Field(description="Current oven temperature (degrees Celsius)")
+    radius: float = Field(description="Current average radius of nanoprecipitates (nanometers)", ge=0.0) # Radius must be non-negative 
+    target_radius: float = Field(description="Target radius for nanoprecipitates (nanometers)")

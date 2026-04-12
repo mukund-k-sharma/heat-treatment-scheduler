@@ -1,0 +1,119 @@
+{
+  "titanium_series": {
+    "Ti_6Al_4V": {
+      "name": "Titanium Ti-6Al-4V (Grade 5)",
+      "composition_wt": {"Ti": 0.90, "Al": 0.06, "V": 0.04},
+      "density_g_cm3": 4.43,
+      "specific_heat_capacity": 526.0,
+      "A": 500.0,
+      "E": 180000.0,
+      "temp_melt": 1600.0,
+      "temp_max": 1800.0,
+      "r_target_min": 20.0,
+      "r_target_max": 25.0,
+      "r_max_clip": 50.0,
+      "A_ox": 80.0,
+      "E_ox": 120000.0
+    }
+  },
+  "aluminum_series": {
+    "Al_96_Cu_4": {
+      "name": "Aluminum 2024 (Al-4wt%Cu)",
+      "composition_wt": {"Al": 0.96, "Cu": 0.04},
+      "density_g_cm3": 2.78,
+      "specific_heat_capacity": 875.0,
+      "A": 1000.0,
+      "E": 120000.0,
+      "temp_melt": 502.0, 
+      "temp_max": 600.0,
+      "r_target_min": 10.0,
+      "r_target_max": 15.0,
+      "r_max_clip": 30.0,
+      "A_ox": 15.0,
+      "E_ox": 130000.0
+    },
+    "Al_98_Cu_2": {
+      "name": "Aluminum (Al-2wt%Cu)",
+      "composition_wt": {"Al": 0.98, "Cu": 0.02},
+      "density_g_cm3": 2.74,
+      "specific_heat_capacity": 890.0,
+      "A": 850.0,
+      "E": 125000.0,
+      "temp_melt": 548.0, 
+      "temp_max": 650.0,
+      "r_target_min": 12.0,
+      "r_target_max": 18.0,
+      "r_max_clip": 35.0,
+      "A_ox": 15.0,
+      "E_ox": 130000.0
+    }
+  },
+  "magnesium_series": {
+    "Mg_AZ31B": {
+      "name": "Magnesium AZ31B",
+      "composition_wt": {"Mg": 0.96, "Al": 0.03, "Zn": 0.01},
+      "density_g_cm3": 1.77,
+      "specific_heat_capacity": 1040.0,
+      "A": 800.0,
+      "E": 130000.0,
+      "temp_melt": 630.0,
+      "temp_max": 750.0,
+      "r_target_min": 15.0,
+      "r_target_max": 20.0,
+      "r_max_clip": 40.0,
+      "A_ox": 100.0,
+      "E_ox": 110000.0
+    }
+  },
+  "steel_series": {
+    "Fe_99_C_1": {
+      "name": "High-Carbon Steel (1095)",
+      "composition_wt": {"Fe": 0.9905, "C": 0.0095},
+      "density_g_cm3": 7.85,
+      "specific_heat_capacity": 475.0,
+      "A": 5000.0,
+      "E": 150000.0,
+      "temp_melt": 1400.0,
+      "temp_max": 1500.0,
+      "r_target_min": 5.0,
+      "r_target_max": 8.0,
+      "r_max_clip": 16.0,
+      "A_ox": 50.0,
+      "E_ox": 140000.0
+    }
+  },
+  "superalloys": {
+    "inconel_718": {
+      "name": "Inconel 718 (Ni-Cr-Fe)",
+      "composition_wt": {"Ni": 0.525, "Cr": 0.19, "Fe": 0.17, "Nb": 0.05, "Mo": 0.03, "Ti": 0.009},
+      "density_g_cm3": 8.19,
+      "specific_heat_capacity": 435.0,
+      "A": 450.0,
+      "E": 260000.0,
+      "temp_melt": 1336.0,
+      "temp_max": 1500.0,
+      "r_target_min": 15.0,
+      "r_target_max": 20.0,
+      "r_max_clip": 40.0,
+      "A_ox": 5.0,
+      "E_ox": 180000.0
+    }
+  },
+  "high_entropy_alloys": {
+    "cantor_equiatomic": {
+      "name": "Cantor Alloy (CoCrFeMnNi)",
+      "composition_wt": {"Co": 0.21, "Cr": 0.185, "Fe": 0.199, "Mn": 0.196, "Ni": 0.21},
+      "density_g_cm3": 8.0,
+      "specific_heat_capacity": 450.0,
+      "A": 8500.0,
+      "E": 210000.0,
+      "temp_melt": 1334.0,
+      "temp_max": 1500.0,
+      "r_target_min": 8.0,
+      "r_target_max": 12.0,
+      "r_max_clip": 24.0,
+      "A_ox": 20.0,
+      "E_ox": 160000.0
+    }
+  }
+}
