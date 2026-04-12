@@ -4,4 +4,5 @@ uvicorn>=0.24.0
 pydantic
 numpy
 openai>=1.0.0
+scipy
 

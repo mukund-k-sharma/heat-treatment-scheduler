@@ -1,0 +1,23 @@
+{
+  "lab_scale": {
+    "name": "Lab Scale Sample (1cm x 5cm)",
+    "radius_m": 0.01,
+    "height_m": 0.05,
+    "base_h": 25.0,
+    "description": "Small sample, low thermal mass, rapid heat response."
+  },
+  "industrial_standard": {
+    "name": "Standard Industrial Billet (10cm x 50cm)",
+    "radius_m": 0.10,
+    "height_m": 0.50,
+    "base_h": 50.0,
+    "description": "Standard medium-weight billet with average furnace convection."
+  },
+  "massive_casting": {
+    "name": "Massive Casting (50cm x 200cm)",
+    "radius_m": 0.50,
+    "height_m": 2.00,
+    "base_h": 75.0,
+    "description": "Huge thermal mass. Extremely sluggish response time requiring heavy predictive braking."
+  }
+}

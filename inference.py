@@ -49,6 +49,10 @@ Example:
     [END] success=true steps=3 rewards=-1.23,-0.85,198.50
 """
 
+"""
+Heat Treatment Scheduler Inference Script for OpenEnv Hackathon (V2).
+"""
+
 import os
 import re
 import textwrap
@@ -57,7 +61,7 @@ from typing import List, Optional
 from openai import OpenAI
 
 from server.heat_treatment_scheduler_environment import HeatTreatmentSchedulerEnvironment, AgentGrade
-from models import HeatTreatmentSchedulerAction, R_MIN, R_MAX, TEMP_MAX
+from models import HeatTreatmentSchedulerAction
 
 IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME") 
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
@@ -70,34 +74,32 @@ MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 BENCHMARK = os.getenv("BENCHMARK", "heat_treatment_scheduler")
 MAX_STEPS = 50
 TEMPERATURE = 0.0
-MAX_TOKENS = 5
+MAX_TOKENS = 15 # Increased to handle "X, YYY" output formats
 SUCCESS_SCORE_THRESHOLD = 0.8 
 
 SYSTEM_PROMPT = textwrap.dedent(
     """
     You are an expert Metallurgical Process Engineer controlling a precipitation hardening furnace.
 
-    Your objective: Grow nanoprecipitates to the exact target radius through precise temperature control, in the shortest time possible.
+    Your objective: Grow nanoprecipitates to the exact target radius without melting the material or triggering Ostwald ripening. 
+    You must account for the specific thermal mass of the hardware and the oxidation rates of the alloy.
 
-    Critical Safety & Quality Constraints:
-    - MELTING TRAGEDY: Temperatures >1100°C will melt the alloy, resulting in catastrophic material destruction.
-    - OVER-COARSENING: Allowing the radius to exceed 15.0 nm triggers Ostwald ripening, permanently ruining the material's structural integrity.
-    - ENERGY EFFICIENCY: Prolonged furnace operation wastes massive amounts of energy. You must hit the target radius and terminate as quickly as safely possible.
-
-    Thermodynamic Operating Regimes:
-    - Frozen Zone (<400°C): Zero atomic diffusion. No precipitate growth occurs.
-    - Safe Growth Zone (400°C - 750°C): Diffusion-controlled growth. Growth rate scales exponentially with temperature, but naturally saturates and slows down as the radius approaches the target size. 
-    - Danger Zone (>750°C): Triggers dangerous Ostwald ripening where large particles aggressively cannibalize small ones, rapidly accelerating past the 15nm failure threshold.
-
-    You MUST respond with ONLY a SINGLE DIGIT (0-5) representing the furnace control action:
+    You must output exactly TWO numbers separated by a comma: [Action, Duration]
+    
+    ACTION (0-5):
         0: Aggressive cooling (-50°C)
         1: Gentle cooling (-10°C)
         2: Hold temperature (0°C - no change)
         3: Gentle heating (+10°C)
         4: Aggressive heating (+50°C)
-        5: TERMINATE EPISODE (Press only when Current Radius exactly matches Target Radius)
+        5: TERMINATE EPISODE (Use only when Current Radius is within the Target Radius bounds)
 
-    Respond with ONLY the digit. Do not include any text, reasoning, or markdown.
+    DURATION:
+        The number of minutes to hold this state (between 1 and 600).
+        Example 1: "4, 120" means aggressive heat for 2 hours.
+        Example 2: "2, 15" means hold temperature for 15 minutes.
+
+    Respond with ONLY the two numbers separated by a comma. No text, no markdown.
     """
 ).strip()
 
@@ -120,13 +122,14 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
     print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
 
 
-def build_user_prompt(step: int, obs, last_reward: float, history: List[str]) -> str:
+def build_user_prompt(step: int, obs, last_reward: float, history: List[str], env: HeatTreatmentSchedulerEnvironment) -> str:
     history_block = "\n".join(history[-4:]) if history else "None"
     
+    # Un-normalize using the dynamically loaded alloy properties
     current_time = obs.time * 180000 
-    current_temp = obs.temperature * TEMP_MAX 
-    current_r = obs.radius * R_MAX 
-    target_r = obs.target_radius * R_MAX 
+    current_temp = obs.temperature * env.alloy.temp_max 
+    current_r = obs.radius * env.alloy.r_max_clip 
+    target_r = obs.target_radius * env.alloy.r_max_clip 
 
     return textwrap.dedent(
         f"""
@@ -140,13 +143,15 @@ def build_user_prompt(step: int, obs, last_reward: float, history: List[str]) ->
         Last reward: {last_reward:.2f}
         Previous steps:
         {history_block}
-        Choose your next action (0-5).
+        Choose your next action (0-5) and duration in minutes.
         """
     ).strip()
 
 
-def get_model_message(client: OpenAI, step: int, obs, last_reward: float, history: List[str]) -> str:
-    user_prompt = build_user_prompt(step, obs, last_reward, history)
+def get_model_message(client: OpenAI, step: int, obs, last_reward: float, history: List[str], env: HeatTreatmentSchedulerEnvironment) -> tuple[int, float]:
+    user_prompt = build_user_prompt(step, obs, last_reward, history, env)
+    user_prompt = f"Context: Processing {env.alloy.name} in {env.hardware.name}.\n" + user_prompt
+    
     try:
         completion = client.chat.completions.create(
             model=MODEL_NAME,
@@ -159,25 +164,36 @@ def get_model_message(client: OpenAI, step: int, obs, last_reward: float, histor
             stream=False,
         )
         text = (completion.choices[0].message.content or "").strip()
-        match = re.search(r"[0-5]", text)
-        return match.group(0) if match else "2"
+
+        # Regex to match "Digit, Number" (e.g., "3, 120" or "4, 45.5")
+        match = re.search(r"([0-5])\s*,\s*(\d+(?:\.\d+)?)", text)
+        if match:
+            action_num = int(match.group(1))
+            duration = float(match.group(2))
+            return action_num, min(max(duration, 1.0), 600.0) # Clamp duration safely
+            
+        return 2, 60.0 # Default fallback
     except Exception as exc:
         print(f"[DEBUG] Model request failed: {exc}", flush=True)
-        return "2"
+        return 2, 60.0
 
 
 def run_single_task(task_name: str, client: OpenAI) -> None:
+    # We now map tasks to entirely different physical scenarios!
     TASK_CONFIG = {
-        "easy-bake": {"difficulty": AgentGrade.EASY, "target": 14.0},
-        "medium-bake": {"difficulty": AgentGrade.MEDIUM, "target": 12.0},
-        "hard-bake": {"difficulty": AgentGrade.HARD, "target": 14.5},
+        "easy-bake": {"difficulty": AgentGrade.EASY, "alloy": "Al_96_Cu_4", "hardware": "lab_scale"},
+        "medium-bake": {"difficulty": AgentGrade.MEDIUM, "alloy": "Fe_99_C_1", "hardware": "industrial_standard"},
+        "hard-bake": {"difficulty": AgentGrade.HARD, "alloy": "Ti_6Al_4V", "hardware": "massive_casting"},
     }
     config = TASK_CONFIG.get(task_name, TASK_CONFIG["medium-bake"])
 
     env = HeatTreatmentSchedulerEnvironment(
-        t=0.0, T=20.0, r=0.0, 
-        r_target=config["target"], 
-        difficulty=config["difficulty"]
+        t=0.0, 
+        T=20.0, 
+        r=0.0, 
+        difficulty=config["difficulty"],
+        alloy_key=config["alloy"],
+        hardware_key=config["hardware"]
     )
 
     history: List[str] = []
@@ -196,10 +212,13 @@ def run_single_task(task_name: str, client: OpenAI) -> None:
             if getattr(obs, 'done', False):
                 break
 
-            message = get_model_message(client, step, obs, last_reward, history)
-            action_num = int(message)
+            action_num, duration = get_model_message(client, step, obs, last_reward, history, env)
 
-            action = HeatTreatmentSchedulerAction(action_num=action_num)
+            # Pass BOTH action_num and duration_minutes
+            action = HeatTreatmentSchedulerAction(
+                action_num=action_num,
+                duration_minutes=duration
+            )
             obs = env.step(action)
 
             reward = float(getattr(obs, 'reward', 0.0))
@@ -210,19 +229,23 @@ def run_single_task(task_name: str, client: OpenAI) -> None:
             steps_taken = step
             last_reward = reward
 
-            log_step(step=step, action=message, reward=reward, done=done, error=error)
+            # Format the action for the logger as "action_num,duration"
+            log_step(step=step, action=f"{action_num},{duration:.0f}", reward=reward, done=done, error=error)
 
-            history.append(f"Step {step}: {message!r} -> reward {reward:+.2f}")
+            history.append(f"Step {step}: Action {action_num} for {duration:.0f}m -> reward {reward:+.2f}")
 
             if done:
                 break
 
-        final_temp = obs.temperature * TEMP_MAX  
-        final_r = obs.radius * R_MAX  
+        final_temp = obs.temperature * env.alloy.temp_max  
+        final_r = obs.radius * env.alloy.r_max_clip  
         
-        if final_temp < 1100 and final_r <= 15.0:
-            proximity_error = abs(config["target"] - final_r)
-            raw_score = 1.0 - (proximity_error / 5.0)
+        # Check against dynamic alloy limits
+        if final_temp < env.alloy.temp_melt and final_r <= env.alloy.r_target_max:
+            proximity_error = abs(env.r_target - final_r)
+            # Normalize score calculation against the success window size
+            window_size = env.alloy.r_target_max - env.alloy.r_target_min
+            raw_score = 1.0 - (proximity_error / (window_size * 2))
         else:
             raw_score = 0.0  
             
