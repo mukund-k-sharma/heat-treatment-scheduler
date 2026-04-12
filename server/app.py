@@ -20,23 +20,24 @@ Endpoints:
     POST /reset
         Reset the environment to initial state.
         Returns: ResetResult with initial observation
-        
+
     POST /step
         Execute an action in the environment.
-        Request body: {"action_num": int}
+        Request body: {"action_num": int, "duration_minutes": float}
         Returns: StepResult with observation, reward, done flag
-        
+
     GET /state
         Query the current environment state (episode_id, step_count).
         Returns: State object
-        
+
     GET /schema
         Get JSON schemas for actions and observations.
         Returns: {"action": {...}, "observation": {...}}
-        
+
     WS /ws
         WebSocket endpoint for persistent client sessions.
         Enables efficient multi-step interactions with lower latency.
+...
 
 Deployment:
     Development (with auto-reload):

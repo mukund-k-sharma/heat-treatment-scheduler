@@ -79,26 +79,29 @@ class HeatTreatmentSchedulerEnv(
 
         This method serializes the action object into a dictionary suitable for
         JSON encoding when sending to the server. It extracts the discrete action
-        number and maps it to the corresponding temperature change.
+        number and the hold duration.
 
         Args:
             action: HeatTreatmentSchedulerAction instance containing action_num (0-5)
+                    and duration_minutes (float).
 
         Returns:
             Dictionary with structure:
             {
-                "action_num": <int 0-5>
+                "action_num": <int 0-5>,
+                "duration_minutes": <float>
             }
             
         Example:
-            >>> action = HeatTreatmentSchedulerAction(action_num=3)  # +10°C
+            >>> action = HeatTreatmentSchedulerAction(action_num=3, duration_minutes=30.0)  # +10°C for 30m
             >>> payload = client._step_payload(action)
-            >>> assert payload == {"action_num": 3}
+            >>> assert payload == {"action_num": 3, "duration_minutes": 30.0}
         """
         payload = {
             "action_num": action.action_num,
+            "duration_minutes": action.duration_minutes,
         }
-        logger.debug(f"Step payload created: action={action.action_num}")
+        logger.debug(f"Step payload created: action={action.action_num}, duration={action.duration_minutes}")
         return payload
 
     def _parse_result(self, payload: Dict) -> StepResult[HeatTreatmentSchedulerObservation]:

@@ -12,83 +12,24 @@ hardening process in metal alloys. The agent learns to control oven temperature 
 a target nanoprecipitate size while managing time and energy constraints.
 
 Physics Model Overview:
-    The environment simulates precipitate growth through four distinct thermal regimes:
+    The environment simulates precipitate growth through distinct thermal regimes based on
+    the alloy's melting temperature.
     
-    1. FROZEN PHASE (T < 400°C):
-       - Atomic diffusion is negligible
-       - Precipitate growth rate: dr/dt = 0
-       - Material remains in initial microstructure
-       
-    2. CONTROLLED GROWTH PHASE (400°C ≤ T ≤ 750°C):
-       - Diffusion-controlled growth dominates
-       - Growth rate follows Arrhenius equation + diffusion saturation
-       - Formula: dr/dt = k(T) * (1 - r/R_max)
-       - This is the target operating window for optimal precipitation
-       - Rate-limiting factor: atomic diffusion in the solid
-       
-    3. OSTWALD RIPENING PHASE (750°C < T ≤ 1100°C):
-       - Grain coarsening becomes dominant
-       - Large precipitates grow at expense of smaller ones
-       - Growth rate: dr/dt = k(T) * (r/R_max)
-       - Material becomes brittle and loses mechanical properties
-       - Failure mode if radius exceeds R_max
-       
-    4. MELTING PHASE (T > 1100°C):
-       - Material begins melting
-       - Crystalline structure dissolves
-       - Immediate episode termination with severe penalty
-
-Mathematical Formulation:
-
-    Arrhenius Equation (Temperature-dependent rate constant):
-        k(T) = A * exp(-E / (R * (T + 273.15)))
-        
-        where:
-            k(T) = rate constant [reactions/second]
-            A = pre-exponential factor [reactions/second]
-            E = activation energy [J/mol]
-            R = universal gas constant [8.314 J/(mol·K)]
-            T = temperature [°C]
-            273.15 = conversion from Celsius to Kelvin
-
-    Radius Evolution (Discrete time step):
-        r(t+1) = r(t) + dt * f(r, T)
-        
-        where:
-            dt = time step duration [seconds]
-            f(r, T) = growth rate function (temperature-dependent)
-
-Now I am moving away from simple discrete jump T = T + action. Instead, I am implementing
-Newton's Law of Cooling combining with Oxidation Insulation Factor. The furnace temperature (T_furnace)
-jumps instantly, but the material's core temperature (T_material) follows a continuous differential equation:
-dT_material/dt = h(t) * A_surface * (T_furnace - T_material) / m * C_p
-
-where:
-    m (mass) is calculated dynamically from the alloy's density_g_cm3
-    C_p is pull directly from "materials.json"
-    h(t) (Heat Transfer Coefficient) decays over time as surface oxidation builds up at hight 
-            temperature, acting as insulator
-
-            
-Now we formulate oxidation factor using Arrhenius kinetics as:
-    d(ox)/dt = A_ox * exp(-E_ox / (R * T_material)) * (0.8 - ox)
-
-    where:
-        A_ox = Pre-exponential factor
-        E_ox = Activation energy
-        R = Universal Gas constant
-
-
-        To prevent it from growing to infinity, we multiply it by a saturation term $(0.8 - ox)$, meaning the thicker the oxide layer gets, the slower it grows.
-
+    The furnace temperature is controlled by the agent, and the material's core temperature
+    follows continuous differential equations based on Newton's Law of Cooling, with an
+    insulation factor from surface oxidation that builds up at high temperatures.
+    
+    Precipitate growth follows Arrhenius kinetics, and its rate varies depending on the 
+    material's current temperature phase (Frozen, Controlled Growth, Ostwald Ripening, or Melting).
 
 Example Usage:
     >>> env = HeatTreatmentSchedulerEnvironment(
     ...     t=0.0,           # Start at 0 seconds
     ...     T=300.0,         # Start at 300°C
     ...     r=1.0,           # Initial radius 1 nm
-    ...     r_target=12.5,   # Target radius 12.5 nm
-    ...     difficulty=AgentGrade.EASY
+    ...     difficulty=AgentGrade.EASY,
+    ...     alloy_key="Al_96_Cu_4",
+    ...     hardware_key="industrial_standard"
     ... )
     >>> obs = env.reset()
     >>> action = HeatTreatmentSchedulerAction(action_num=3)  # Heat by 10°C
@@ -128,11 +69,88 @@ class AgentGrade(IntEnum):
     HARD = 3    # High noise: challenging real-world conditions
 
 class HeatTreatmentSchedulerEnvironment(Environment):
+    """
+    Heat Treatment Scheduler Environment for precipitation hardening.
+    
+    This environment simulates the thermodynamics and kinetics of nanoprecipitate growth
+    in metal alloys using continuous differential equations. The agent controls the 
+    furnace temperature, while the material's core temperature and precipitate radius 
+    evolve based on the underlying physics.
+    
+    Physics Model Details:
+    ----------------------
+    1. Heat Transfer (Newton's Law of Cooling):
+       The furnace temperature (T_furnace) changes instantaneously when the agent takes
+       an action, but the material core temperature (T_material) follows a continuous
+       differential equation:
+       
+           dT_material/dt = h(t) * A_surface * (T_furnace - T_material) / (m * C_p)
+           
+       Where:
+         - m (mass) is calculated dynamically from the alloy's density_g_cm3.
+         - C_p is the specific heat capacity from materials.json.
+         - h(t) is the Heat Transfer Coefficient, which decays over time as surface
+           oxidation builds up at high temperatures, acting as an insulator.
+
+    2. Oxidation Kinetics (Arrhenius):
+       The oxidation factor (ox) grows based on the material's core temperature:
+       
+           d(ox)/dt = A_ox * exp(-E_ox / (R * (T_material + 273.15))) * (0.8 - ox)
+           
+       Where:
+         - A_ox = Pre-exponential factor for oxidation.
+         - E_ox = Activation energy for oxidation.
+         - R = Universal Gas Constant.
+       The term (0.8 - ox) acts as a saturation term, capping the insulation effect
+       at 80%. As the oxide layer thickens, its growth slows down.
+
+    3. Precipitate Growth (Arrhenius + Phase Thresholds):
+       The growth rate depends on the temperature-dependent reaction rate k(T):
+       
+           k(T) = A * exp(-E / (R * (T_material + 273.15)))
+           
+       The actual growth rate dr/dt varies depending on the current thermal regime,
+       which is defined relative to the alloy's melting temperature (T_melt):
+       
+       a) Frozen Phase (T < 0.35 * T_melt):
+          Atomic diffusion is severely limited. Material remains in initial microstructure.
+          dr/dt = 0
+          
+       b) Controlled Growth Phase (0.35 * T_melt <= T <= 0.68 * T_melt):
+          Diffusion-controlled growth dominates. Rate-limiting factor: atomic diffusion in the solid. This is the optimal window.
+          dr/dt = k(T) * (1 - r/R_max)
+          The (1 - r/R_max) term is a saturation factor. As the radius approaches
+          R_max, growth slows dramatically, allowing the agent to "park" at the target.
+          
+       c) Ostwald Ripening Phase (0.68 * T_melt < T <= T_melt):
+          High-temperature grain coarsening dominates. Material becomes brittle and loses mechanical properties. Larger precipitates grow at
+          the expense of smaller ones. This is a failure mode.
+          dr/dt = k(T) * (r/R_max)
+          
+       d) Melting Phase (T > T_melt):
+          Material breaks down. Crystalline structure dissolves. Episode terminates.
+          dr/dt = 0
+    """
 
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
     R: float = 8.314 # Universal Gas Constant
     
     def __init__(self, t=0.0, T=20.0, r=0.0, difficulty=AgentGrade.EASY, alloy_key="Al_96_Cu_4", hardware_key="industrial_standard"):
+        """
+        Initializes the environment state and dynamically loads physical properties.
+        
+        Args:
+            t: Initial elapsed time (seconds).
+            T: Initial furnace and material temperature (°C).
+            r: Initial precipitate radius (nanometers).
+            difficulty: Controls environmental stochasticity via AgentGrade.
+            alloy_key: Key for the metal alloy to simulate. Must match an entry in
+                       `materials.json` (e.g., "Al_96_Cu_4", "Ti_6Al_4V"). This dynamically
+                       loads all intrinsic physical properties (melting temp, density, etc.).
+            hardware_key: Key for the hardware setup to simulate. Must match an entry in
+                          `hardware.json` (e.g., "industrial_standard", "lab_scale"). This
+                          dynamically loads extrinsic geometric and thermodynamic properties.
+        """
 
         logger.info(f"Initializing v2 environment: Alloy : {alloy_key}, Hardware: {hardware_key}")
 
@@ -246,86 +264,20 @@ class HeatTreatmentSchedulerEnvironment(Environment):
 
     def step(self, action : HeatTreatmentSchedulerAction, timeout_s: float | None = None, **kwargs: Any) -> HeatTreatmentSchedulerObservation:
         """
-        Implementing Newton's Law of Cooling combining with Oxidation Insulation Factor. 
-        The furnace temperature (T_furnace) jumps instantly, but the material's core temperature (T_material) follows a continuous differential equation:
-
-        dT_material/dt = h(t) * A_surface * (T_furnace - T_material) / m * C_p
-
-        where:
-            m (mass) is calculated dynamically from the alloy's density_g_cm3
-            C_p is pull directly from "materials.json"
-            h(t) (Heat Transfer Coefficient) decays over time as surface oxidation builds up at hight 
-                    temperature, acting as insulator
-
-        And
-
-        Physics Model (Four Temperature Regimes):
-
-            1. FROZEN PHASE :
-                Atomic diffusion is severely limited. Precipitate growth is essentially
-                zero. Atoms lack enough thermal energy to move through the solid matrix.
-                Formula: dr/dt = 0
-                Physical Interpretation: No growth
-
-            2. CONTROLLED GROWTH PHASE - (0.35 * alloy's melting tempearture):
-                Diffusion-controlled growth dominates. Atoms have enough thermal energy
-                to diffuse through the matrix but not enough to trigger Ostwald ripening.
-                This is the SWEET SPOT for precipitation hardening.
-                
-                Formula: dr/dt = k(T) * (1 - r / R_max)
-                
-                Components:
-                - k(T) = A * exp(-E / (R * (T + 273.15)))  [Arrhenius equation]
-                - (1 - r/R_max) = saturation factor
-                
-                As r → R_max, the growth slows dramatically (saturation effect).
-                This provides natural encouragement for the agent to stop heating near target.
-
-            3. OSTWALD RIPENING PHASE - (0.68 * alloy's melting temperature):
-                High-temperature grain coarsening dominates. Larger precipitates grow
-                at the expense of smaller ones, leading to loss of mechanical properties.
-                This is FAILURE MODE to avoid.
-                
-                Formula: dr/dt = k(T) * (r / R_max)
-                
-                The growth rate increases with radius (feedback effect).
-                Large precipitates grow faster → material becomes brittle.
-
-            4. MELTING PHASE:
-                Material begins to melt. Structure breaks down. Growth rate stops.
-                Formula: dr/dt = 0 (but episode terminates immediately)
-
-        Arrhenius Equation Explanation:
-            k(T) = A * exp(-E / (R * (T + 273.15)))
+        Executes a single time step in the environment.
+        
+        This method applies the chosen temperature change action to the furnace,
+        and advances the simulation by the action's specified duration. The
+        underlying physics (heat transfer and precipitate growth) are simulated
+        continuously over this duration using SciPy's ODE solver.
+        
+        Args:
+            action: The action to take, specifying the temperature change and duration.
+            timeout_s: Optional timeout for the step execution.
+            **kwargs: Additional keyword arguments.
             
-            - k(T): Temperature-dependent reaction rate [reactions/second]
-            - A: Pre-exponential factor (attempt frequency) [reactions/second]
-            - E: Activation energy (energy barrier) [J/mol]
-            - R: Universal gas constant = 8.314 [J/(mol·K)]
-            - T+273.15: Absolute temperature [Kelvin]
-
-        
-        These two differential equations are needs to be solved continuously between the time span:
-        1. dT_material/dt = h(t) * A_surface * (T_furnace - T_material) / m * C_p
-        2. k(T) = A * exp(-E / (R * (T + 273.15)))
-            and based on material temperature, we need to calculate dr_dt, which varies:
-                Frozen Phase : dr/dt = 0
-                Controlled Growth : dr/dt = k(T) * (1 - r/R_max)
-                Ostwald ripening : dr/dt = k(T) * (r/R_max)
-                melting phase : dr/dt = 0 (and episode terminates)
-
-        
-        Now we formulate oxidation factor using Arrhenius kinetics as:
-            d(ox)/dt = A_ox * exp(-E_ox / (R * T_material)) * (0.8 - ox)
-
-            where:
-                A_ox = Pre-exponential factor
-                E_ox = Activation energy
-                R = Universal Gas constant
-
-
-             To prevent it from growing to infinity, we multiply it by a saturation term $(0.8 - ox)$, meaning the thicker the oxide layer gets, the slower it grows.
-
+        Returns:
+            An observation containing the new state of the environment.
         """
 
         self.step_count += 1
@@ -404,10 +356,34 @@ class HeatTreatmentSchedulerEnvironment(Environment):
 
     def _physics_derivatives(self, t, y):
         """
-        The continuous differential equations solved by SciPy.
-        y[0] = T_material
-        y[1] = radius
-        y[2] = oxidation_factor
+        Calculates the continuous differential equations for the simulation.
+        
+        This function is solved by SciPy over the duration of a step. It computes
+        the rate of change for material temperature, precipitate radius, and
+        oxidation factor.
+        
+        Physics Model:
+        1. Heat Transfer (Newton's Law of Cooling):
+           dT_material/dt = h(t) * A_surface * (T_furnace - T_material) / (m * C_p)
+           where h(t) decays as oxidation builds up.
+           
+        2. Precipitate Growth (Arrhenius Equation):
+           k(T) = A * exp(-E / (R * (T_material + 273.15)))
+           - Frozen Phase (T < 0.35 * T_melt): dr/dt = 0
+           - Controlled Growth (T <= 0.68 * T_melt): dr/dt = k(T) * (1 - r/R_max)
+           - Ostwald Ripening (T <= T_melt): dr/dt = k(T) * (r/R_max)
+           - Melting Phase (T > T_melt): dr/dt = 0
+           
+        3. Oxidation Rate:
+           d(ox)/dt = A_ox * exp(-E_ox / (R * (T_material + 273.15))) * (0.8 - ox)
+           Capped at 80% insulation.
+
+        Args:
+            t: Current time in seconds.
+            y: Current state vector [T_material, radius, oxidation_factor].
+            
+        Returns:
+            List of derivatives [dT_material/dt, dr/dt, d_ox/dt].
         """
 
         T_material, r, ox = y
@@ -422,7 +398,7 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         # k(T) = A * exp(-E / (R * (T + 273.15)))
         k = self.A * np.exp(-self.E / (self.R * (T_material + 273.15)))
 
-        forzen_threshold = self.alloy.temp_melt * 0.35
+        frozen_threshold = self.alloy.temp_melt * 0.35
         ripening_threshold = self.alloy.temp_melt * 0.68
 
         # Based on material temperature, we need to calculate dr_dt, which varies as:
@@ -431,7 +407,7 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         #   Ostwald ripening : dr/dt = k(T) * (r/R_max)
         #   melting phase : dr/dt = 0 (an episode terminates)
 
-        if T_material < forzen_threshold:
+        if T_material < frozen_threshold:
             dr_dt = 0.0
         elif T_material <= ripening_threshold:
             dr_dt = k * (1.0 - (r / self.alloy.r_target_max))
