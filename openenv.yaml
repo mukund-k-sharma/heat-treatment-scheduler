@@ -9,8 +9,8 @@ author: "Mukund Kumar's team"
 tags: ["scheduling", "process-control", "physics-simulation"]
 tasks:
   - name: "easy-bake"
-    description: "Hit a 14.0nm target with low thermal noise."
+    description: "Grow Al-2024 precipitates to ~12.5nm in a lab-scale sample (σ_T=1°C)."
   - name: "medium-bake"
-    description: "Hit a 12.0nm target with moderate thermal noise."
+    description: "Grow Steel 1095 precipitates to ~6.5nm in an industrial billet (σ_T=2°C)."
   - name: "hard-bake"
-    description: "Hit an 14.5nm target under severe thermal noise."
+    description: "Grow Ti-6Al-4V precipitates to ~22.5nm in a massive casting (σ_T=3°C)."
