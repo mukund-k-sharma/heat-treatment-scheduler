@@ -50,10 +50,6 @@ Example:
     [END] success=true steps=3 rewards=-1.23,-0.85,198.50
 """
 
-"""
-Heat Treatment Scheduler Inference Script for OpenEnv Hackathon (V2).
-"""
-
 import os
 import re
 import textwrap
@@ -75,7 +71,7 @@ MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 BENCHMARK = os.getenv("BENCHMARK", "heat_treatment_scheduler")
 MAX_STEPS = 50
 TEMPERATURE = 0.0
-MAX_TOKENS = 15 # Increased to handle "X, YYY" output formats
+MAX_TOKENS = 15
 SUCCESS_SCORE_THRESHOLD = 0.8 
 
 SYSTEM_PROMPT = textwrap.dedent(

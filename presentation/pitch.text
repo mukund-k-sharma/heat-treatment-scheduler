@@ -1,0 +1,45 @@
+[Slide 1: A massive industrial furnace vs. a simple grid-world]
+"Good afternoon. Most RL environments evaluate agents in discrete, instantaneous steps—like moving a chess piece. 
+But the real world is continuous, and it has inertia.
+
+I built the Heat Treatment Digital Twin, an environment designed to push the boundaries of Long-Horizon Planning. 
+In aerospace manufacturing, hitting a precise nanoprecipitate radius in a High-Entropy Alloy takes up to 50 hours. 
+The core challenge isn't just knowing the right temperature; it’s surviving Thermal Lag. 
+If an agent tells a massive industrial furnace to heat up, the air gets hot instantly, but the metal takes hours.
+
+Frontier LLMs fail here. They think in next-token, instantaneous steps. They overheat the furnace, 
+the residual heat causes the material to melt or over-coarsen, and the episode ends in catastrophic failure."
+
+
+
+[Slide 2: Visual of the ODE math and SMDP Action space ([Action, Duration])]
+"To solve this, I completely ripped out standard discrete step math. This environment is powered by a continuous ODE solver—SciPy’s solve_ivp.
+
+It continuously calculates Newton's Law of Cooling coupled with Arrhenius kinetics for both precipitate growth and surface oxidation.
+
+Because the physics are continuous, I upgraded the agent to a Semi-Markov Decision Process (SMDP). 
+Instead of forcing the LLM to make a decision every second, it outputs an action and a duration—for example, 
+'Aggressive Heat for 120 minutes.' The engine then simulates the differential equations across that exact timespan.
+
+This environment is completely configuration-driven. Drop in a new materials.json for Titanium, 
+or a hardware.json for a massive casting, and the thermal inertia completely changes without rewriting a single line of Python."
+
+
+
+
+[Slide 3: DPO Training curve and "Predictive Braking" visual]
+"A zero-shot model cannot handle this lag. So, I used the environment to generate a trajectory dataset of successes and catastrophic failures.
+
+I used Unsloth and Hugging Face's TRL to run Direct Preference Optimization (DPO) on an open-source Llama-3-8B model.
+
+The goal was to teach the model Predictive Braking. As you can see in the reward curves, the fine-tuned model successfully 
+learned to cut the furnace heat hours before the material reached the target temperature, allowing the thermal momentum 
+to coast perfectly into the target zone without overshooting. It learned the physical physics."
+
+
+[Slide 4: GitHub link / Architecture Summary]
+"We’ve built an environment that forces agents out of discrete shortcuts and into continuous, physical reality. 
+It generates the exact preference data needed to teach small models how to manage real-world momentum.
+
+Thank you, and I’m ready for your questions."
+

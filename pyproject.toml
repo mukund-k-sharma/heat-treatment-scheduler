@@ -29,6 +29,10 @@ dependencies = [
     # "openspiel>=1.0.0",
     # "smolagents>=1.22.0,<2",
     "scipy>=1.15.3",
+    "python-dotenv>=1.2.2",
+    "streamlit>=1.56.0",
+    "plotly>=6.7.0",
+    "qrcode[pil]>=8.2",
 ]
 
 [project.optional-dependencies]
