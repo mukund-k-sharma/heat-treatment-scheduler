@@ -11,9 +11,9 @@ target radius (loaded from materials.json) without melting the material (T >= T_
 or over-coarsening (r > r_target_max).
 
 Environment Requirements:
-    API_BASE_URL         - OpenAI-compatible API endpoint (default: https://api.openai.com/v1)
+    API_BASE_URL         - OpenAI-compatible API endpoint (default: https://router.huggingface.co/v1)
     HF_TOKEN             - Hugging Face Access Token / API key.
-    MODEL_NAME           - LLM identifier (e.g., 'gpt-4o', 'gpt-4', custom LLM)
+    MODEL_NAME           - LLM identifier (default: Qwen/Qwen2.5-72B-Instruct)
 
 Submission Requirements:
     - This script must be named `inference.py` and placed in the project root directory

@@ -70,7 +70,7 @@ To evaluate the LLM agent against the three distinct material/hardware scenarios
 
 ```bash
 # Set the required environment variables (prioritizes API_KEY for proxy routing)
-export API_BASE_URL="[https://router.huggingface.co/v1](https://router.huggingface.co/v1)"
+export API_BASE_URL="https://router.huggingface.co/v1"
 export API_KEY="your_injected_proxy_key"
 export MODEL_NAME="Qwen/Qwen2.5-72B-Instruct"
 
@@ -82,20 +82,11 @@ python inference.py
 
 Unlike standard discrete reinforcement learning environments, this Digital Twin is powered by a continuous ODE solver (`scipy.integrate.solve_ivp`).
 
-### Server Components
-
-```text
-server/
-├── app.py                                # FastAPI application
-├── heat_treatment_scheduler_environment.py  # Core physics simulation
-└── __init__.py                          # Exports
-```
-
 **Key classes:**
 
-- `HeatTreatmentSchedulerEnvironment`: Physics engine + step/reset logic
-- `AgentGrade`: Enum for difficulty (EASY, MEDIUM, HARD)
-- OpenEnv integration: Automatic REST + WebSocket endpoints
+- `HeatTreatmentSchedulerEnvironment`: Physics engine with continuous ODE solver + step/reset logic
+- `AgentGrade`: Difficulty enum controlling furnace temperature noise (σ_T)
+- OpenEnv integration: Automatic REST + WebSocket endpoints via `create_app`
 
 ### Project Structure
 
@@ -103,39 +94,25 @@ server/
 heat_treatment_scheduler/
 ├── __init__.py
 ├── client.py              # Client (EnvClient subclass)
-├── Dockerfile             # Docker file
-├── hardware.json          #
-├── materials.json         #
-├── models.py              # Pydantic types + constants
-├── inference.py           # Example LLM inference agent
+├── Dockerfile             # Docker configuration
+├── hardware.json          # Extrinsic hardware geometries (thermal mass, surface area)
+├── materials.json         # Intrinsic alloy properties (Arrhenius constants, density, C_p)
+├── models.py              # Pydantic data models + physics constants
+├── inference.py           # LLM agent baseline
 ├── logging_config.py      # Logging setup
 ├── openenv.yaml           # OpenEnv metadata
 ├── pyproject.toml         # Dependencies & build config
+├── ui.py                  # Streamlit interactive dashboard
 ├── README.md              # This file
-├── LICENSE
 └── server/
     ├── __init__.py
     ├── app.py             # FastAPI/OpenEnv server
-    ├── heat_treatment_scheduler_environment.py
-    ├── Dockerfile
-    └── requirements.txt
-```
-
-### Difficulty Levels
-
-Control environment stochasticity:
-
-```python
-from heat_treatment_scheduler.server import AgentGrade
-
-AgentGrade.EASY      # σ_T=2°C, σ_r=1%, σ_t=2%     (Clean baseline)
-AgentGrade.MEDIUM    # σ_T=4°C, σ_r=3%, σ_t=5%     (Realistic)
-AgentGrade.HARD      # σ_T=7°C, σ_r=5%, σ_t=8%     (Challenging)
+    └── heat_treatment_scheduler_environment.py  # Core physics engine (ODE solver)
 ```
 
 ### Physics Engine
 
-#### 1. The action Space (SMDP)
+#### 1. The Action Space (SMDP)
 
 The action space is a decoupled **[Action, Duration]** pair, perfectly mirroring how human engineers program industrial machines via Thermal Recipes.
 
@@ -208,7 +185,6 @@ The environment dynamically loads physics properties, allowing **zero-code** eva
     - `lab_scale` (Small sample, low thermal mass)
     - `massive_casting` (Huge thermal mass, extremely sluggish response)
 
-
 ### Difficulty Levels (Curriculum Learning)
 
 Control environment stochasticity:
@@ -216,9 +192,9 @@ Control environment stochasticity:
 ```python
 from heat_treatment_scheduler.server import AgentGrade
 
-AgentGrade.EASY      # σ_T=2°C, σ_r=1%, σ_t=2%     (Clean baseline)
-AgentGrade.MEDIUM    # σ_T=4°C, σ_r=3%, σ_t=5%     (Realistic)
-AgentGrade.HARD      # σ_T=7°C, σ_r=5%, σ_t=8%     (Challenging)
+AgentGrade.EASY      # σ_T=1°C   (Clean baseline)
+AgentGrade.MEDIUM    # σ_T=2°C   (Realistic)
+AgentGrade.HARD      # σ_T=3°C   (Challenging)
 ```
 
 **Recommended training path**: EASY → MEDIUM → HARD
@@ -304,8 +280,4 @@ For detailed physics explanations and code comments, see:
 ## License
 
 © Meta Platforms, Inc. and affiliates.  
-Licensed under BSD-style license. See [LICENSE](LICENSE) file.
-
----
-
-<!-- **For questions or issues, refer to inline code comments. All formulas and physics are extensively documented in `server/heat_treatment_scheduler_environment.py`.** -->
+Licensed under BSD-style license.

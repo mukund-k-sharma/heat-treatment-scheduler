@@ -13,18 +13,19 @@ and validation.
 
 Physics Context:
     The heat treatment process controls nanoprecipitate growth in metal alloys through
-    precise temperature management. The environment tracks three key variables:
-    - Time (t): Elapsed time in the oven (seconds)
-    - Temperature (T): Current oven temperature (Celsius)
+    precise temperature management. The environment tracks three coupled state variables:
+    - Time (t): Elapsed time in the furnace (seconds)
+    - Temperature (T_material): Core temperature of the material (Celsius), which lags
+      behind the furnace air temperature due to thermal inertia
     - Radius (r): Average radius of nanoprecipitates (nanometers)
 
-    The physics is governed by four regimes based on temperature.
+    The physics is governed by four thermal regimes relative to the alloy's melting point.
 """
 
 import json
 from pathlib import Path
 
-from openai import BaseModel
+from pydantic import BaseModel
 from openenv.core.env_server.types import Action, Observation, State
 from pydantic import Field
 from typing import ClassVar, Dict
@@ -51,7 +52,7 @@ class AlloyProperties(BaseModel):
     specific_heat_capacity : float = Field(description="Specific heat capacity (C_p) in J/(kg * K)")
     A: float = Field(description="Pre-exponential factor for Arrhenius equation (reactions/s)")
     E: float = Field(description="Activation energy for Arrhenius equation (J/mol)")
-    temp_melt: float = Field(description="Melting temperature in Celsius (catastropic failure point)")
+    temp_melt: float = Field(description="Melting temperature in Celsius (catastrophic failure point)")
     temp_max : float = Field(description="Absolute max temperature for neural network normalization")
     r_target_min: float = Field(description="Minimum target radius for success (nm)")
     r_target_max : float = Field(description="Maximum target radius for success (nm)")
@@ -87,7 +88,7 @@ def load_alloy_registry() -> Dict[str, AlloyProperties]:
         logger.info(f"Successfully loaded {len(registry)} materials into the registry.")
         return registry
     except FileNotFoundError:
-        logger.error(f"Count not file materials config at {config_path}")
+        logger.error(f"Could not find materials config at {config_path}")
         raise
     except Exception as e:
         logger.error(f"Failed to parse materials config : {e}")
@@ -102,11 +103,11 @@ ALLOY_REGISTRY = load_alloy_registry()
 
 class HardwareProperties(BaseModel):
     """
-    Define the extrinsic geometric and thermodynamic properties fo the setup.
+    Define the extrinsic geometric and thermodynamic properties of the setup.
     """
     # Geometric properties (billet)
     name : str = Field(description="Display name of hardware setup.")
-    radius_m: float = Field(description="Radius of the cylinderical billet in meters.", gt=0.0)
+    radius_m: float = Field(description="Radius of the cylindrical billet in meters.", gt=0.0)
     height_m: float = Field(description="Height of cylindrical billet in meters", gt=0.0)
 
     # Thermodynamic properties (billet)
@@ -262,7 +263,7 @@ class HeatTreatmentSchedulerObservation(Observation):
         )
     )
     
-    remaining_time: float = Field(description="Normalized time remaining: (1 - (t / TIME_MAX)")
+    remaining_time: float = Field(description="Normalized time remaining: (1 - (t / TIME_MAX))")
 
 # ======================== STATE SPACE ========================
 
@@ -279,12 +280,12 @@ class HeatTreatmentSchedulerState(State):
     
     Attributes:
         time: Elapsed time in seconds. Range: [TIME_MIN, TIME_MAX]
-        temperature: Oven temperature in degrees Celsius. Range: [TEMP_MIN, TEMP_MAX]
+        temperature: Material core temperature in degrees Celsius.
         radius: Current precipitate radius in nanometers. Range: [0, ∞)
         target_radius: Desired precipitate radius in nanometers.
     """
     
     time: float = Field(description="Current elapsed time in the oven (seconds)")
-    temperature: float = Field(description="Current oven temperature (degrees Celsius)")
+    temperature: float = Field(description="Current material core temperature (degrees Celsius)")
     radius: float = Field(description="Current average radius of nanoprecipitates (nanometers)", ge=0.0) # Radius must be non-negative 
     target_radius: float = Field(description="Target radius for nanoprecipitates (nanometers)")

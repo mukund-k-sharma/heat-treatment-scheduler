@@ -59,9 +59,9 @@ logger.debug("Heat Treatment Scheduler environment module loaded")
 
 class AgentGrade(IntEnum):
     """
-    Difficulty level enumeration controlling noise in the environment.
+    Difficulty level enumeration controlling furnace temperature noise (σ_T).
     
-    Higher difficulty = more stochasticity in temperature, growth, and timing.
+    Higher difficulty = more stochasticity in furnace temperature readings.
     Useful for curriculum learning: start with EASY, progress to HARD.
     """
     EASY = 1    # Low noise: suitable for learning basics
@@ -169,15 +169,15 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         self.E = self.alloy.E
         self.C_p = self.alloy.specific_heat_capacity
 
-        self.density_m3 = self.alloy.density_g_cm3
+        self.density_g_cm3 = self.alloy.density_g_cm3
         self.base_h = self.hardware.base_h
 
         # Geometric / Thermodynamic Calculation
-        # Volumn of cylinder = pi * r^2 * h
-        volumn_m3 = np.pi * (self.hardware.radius_m ** 2) * self.hardware.height_m
+        # Volume of cylinder = pi * r^2 * h
+        volume_m3 = np.pi * (self.hardware.radius_m ** 2) * self.hardware.height_m
 
-        # Mass : volumn (m^3) * density (convert g/cm^3 to kg/m^3) 
-        self.mass_kg = (self.density_m3 * 1000) * volumn_m3
+        # Mass : volume (m^3) * density (convert g/cm^3 to kg/m^3) 
+        self.mass_kg = (self.density_g_cm3 * 1000) * volume_m3
 
         # Surface area: 2 * pi * r * (r + h)
         self.surface_area_m2 = 2 * np.pi * self.hardware.radius_m * (self.hardware.radius_m + self.hardware.height_m)
@@ -308,7 +308,7 @@ class HeatTreatmentSchedulerEnvironment(Environment):
 
             # Extract final state
             self.T_material = solution.y[0][-1]
-            self.r = solution.y[1][-1]
+            self.r = max(0.0, solution.y[1][-1])  # Clamp: ODE solver numerical noise can produce tiny negatives
             self.oxidation_factor = min(0.8, solution.y[2][-1])
         except Exception as e:
             logger.error(f"ODE solver failed : {e}")
@@ -416,7 +416,7 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         else:
             dr_dt = 0.0
 
-        # 3. Orixation Rate (Arrhenius)
+        # 3. Oxidation Rate (Arrhenius)
         # Calculates how fast the insulating layer builds based on current core temperature
         # d(ox)/dt = A_ox * exp(-E_ox / (R * (T_material + 273.15))) * (0.8 - ox)
         k_ox = self.alloy.A_ox * np.exp(-self.alloy.E_ox / (self.R * (T_material + 273.15)))
