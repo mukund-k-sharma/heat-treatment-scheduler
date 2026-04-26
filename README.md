@@ -7,7 +7,7 @@ sdk: docker
 pinned: false
 app_port: 8000
 base_path: /web
-short_description: A physics-informed continuous reinforcement learning environment for metallurgical process control.
+short_description: Physics-informed RL environment for heat treatment.
 tags:
   - openenv
   - reinforcement-learning
