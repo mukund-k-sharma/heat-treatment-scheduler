@@ -116,13 +116,13 @@ Defines physical constants (Arrhenius parameters, melting points, oxidation rate
 
 | Key | Alloy | $A$ | $E$ (kJ/mol) | $C_p$ (J/kg·K) | $T_{melt}$ (°C) | Target Radius (nm) |
 |-----|-------|-----|---------------|-----------------|-----------------|--------------------|
-| `Al_96_Cu_4` | Aluminum 2024 | 1000 | 120 | 875 | 502 | 10–15 |
-| `Al_98_Cu_2` | Aluminum (Al-2wt%Cu) | 850 | 125 | 890 | 548 | 12–18 |
-| `Ti_6Al_4V` | Titanium Grade 5 | 500 | 180 | 526 | 1600 | 20–25 |
-| `Mg_AZ31B` | Magnesium AZ31B | 800 | 130 | 1040 | 630 | 15–20 |
-| `Fe_99_C_1` | High-Carbon Steel 1095 | 5000 | 150 | 475 | 1400 | 5–8 |
-| `inconel_718` | Inconel 718 (Ni-Cr-Fe) | 450 | 260 | 435 | 1336 | 15–20 |
-| `cantor_equiatomic` | Cantor Alloy (CoCrFeMnNi) | 8500 | 210 | 450 | 1334 | 8–12 |
+| `Al_96_Cu_4` | Aluminum 2024 | 1.0e9 | 120 | 875 | 502 | 10–15 |
+| `Al_98_Cu_2` | Aluminum (Al-2wt%Cu) | 9.65e8 | 125 | 890 | 548 | 12–18 |
+| `Ti_6Al_4V` | Titanium Grade 5 | 6.2e5 | 180 | 526 | 1600 | 20–25 |
+| `Mg_AZ31B` | Magnesium AZ31B | 3.93e8 | 130 | 1040 | 630 | 15–20 |
+| `Fe_99_C_1` | High-Carbon Steel 1095 | 1.27e5 | 150 | 475 | 1400 | 5–8 |
+| `inconel_718` | Inconel 718 (Ni-Cr-Fe) | 2.26e11 | 260 | 435 | 1336 | 15–20 |
+| `cantor_equiatomic` | Cantor Alloy (CoCrFeMnNi) | 4.44e8 | 210 | 450 | 1334 | 8–12 |
 
 ### `hardware.json` — Extrinsic Properties
 

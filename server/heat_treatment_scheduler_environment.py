@@ -332,7 +332,8 @@ class HeatTreatmentSchedulerEnvironment(Environment):
                 t_span=t_span,
                 y0=y0,
                 method='RK45', # Explicit Runge-Kutta method of order 5(4) 
-                max_step=120  # solve it every 2 min (120 s)
+                max_step=120,  # solve it every 2 min (120 s)
+                events=self._melting_event  # Terminate integration if T >= T_melt
             )
 
             # Extract final state
@@ -454,16 +455,16 @@ class HeatTreatmentSchedulerEnvironment(Environment):
 
         # Based on material temperature, we need to calculate dr_dt, which varies as:
         #   Frozen Phase : dr/dt = 0
-        #   Controlled Growth : dr/dt = k(T) * (1 - r/R_max)
-        #   Ostwald ripening : dr/dt = k(T) * (r/R_max)
+        #   Controlled Growth : dr/dt = k(T) * (1 - r/R_max_clip)
+        #   Ostwald ripening : dr/dt = k(T) * (r/R_max_clip)
         #   melting phase : dr/dt = 0 (an episode terminates)
 
         if T_material < frozen_threshold:
             dr_dt = 0.0
         elif T_material <= ripening_threshold:
-            dr_dt = k * (1.0 - (r / self.alloy.r_target_max))
+            dr_dt = k * (1.0 - (r / self.alloy.r_max_clip))
         elif T_material <= self.alloy.temp_melt:
-            dr_dt = k * (r / self.alloy.r_target_max)
+            dr_dt = k * (r / self.alloy.r_max_clip)
         else:
             dr_dt = 0.0
 
@@ -476,6 +477,17 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         d_ox_dt = k_ox * (0.8 - ox) if ox < 0.8 else 0.0
 
         return [dT_mat_dt, max(dr_dt, 0.0), max(d_ox_dt, 0.0)]
+
+    def _melting_event(self, t, y):
+        """Event function for solve_ivp: returns 0 when T_material crosses T_melt.
+        
+        Setting terminal=True causes the solver to stop integration at the exact
+        moment the material melts, rather than continuing for the full duration.
+        """
+        return y[0] - self.alloy.temp_melt
+    _melting_event.terminal = True
+    _melting_event.direction = 1  # Only trigger when crossing upward
+    
     
     @property
     def state(self) -> HeatTreatmentSchedulerState:

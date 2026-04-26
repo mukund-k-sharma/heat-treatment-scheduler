@@ -89,6 +89,15 @@ This evaluates three tasks — `easy-bake` (Al-2024, lab scale), `medium-bake` (
 
 By step ~150, GRPO optimized the multi-step trajectories, allowing the agent to successfully brake the furnace temperature and park the precipitate radius inside the strict 20.0 nm - 25.0 nm target window.
 
+<!-- ![Reward Convergence]([INSERT_WANDB_REWARD_IMAGE_URL])
+*Figure 1: GRPO Reward gradient showing the agent learning to avoid melting penalties.*
+
+![Radius Trajectory]([INSERT_WANDB_RADIUS_IMAGE_URL])
+*Figure 2: The physical precipitate radius converging on the 22.5 nm target.*
+
+![Core Temperature]([INSERT_WANDB_TEMP_IMAGE_URL])
+*Figure 3: The agent learning to manage thermal lag and oxidation insulation without breaching the 1600°C failure threshold.* -->
+
 > **Training charts** (reward convergence, radius trajectories, and temperature management) are available in the [Presentation Deck](https://docs.google.com/presentation/d/1ZHcN1Glm7zaK1rs2FiZDN-AXNNFXhR61vBk14T-eZh8/edit?usp=sharing).
 
 Key results:
