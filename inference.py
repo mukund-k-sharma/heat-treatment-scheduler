@@ -120,6 +120,7 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
 
 
 def build_user_prompt(step: int, obs, last_reward: float, history: List[str], env: HeatTreatmentSchedulerEnvironment) -> str:
+    """Build the user-facing prompt with denormalized furnace state and recent history."""
     history_block = "\n".join(history[-4:]) if history else "None"
     
     # Un-normalize using the dynamically loaded alloy properties
@@ -146,6 +147,7 @@ def build_user_prompt(step: int, obs, last_reward: float, history: List[str], en
 
 
 def get_model_message(client: OpenAI, step: int, obs, last_reward: float, history: List[str], env: HeatTreatmentSchedulerEnvironment) -> tuple[int, float]:
+    """Query the LLM for an action-duration pair; returns (action_num, duration_minutes). Falls back to (2, 60.0) on parse failure."""
     user_prompt = build_user_prompt(step, obs, last_reward, history, env)
     user_prompt = f"Context: Processing {env.alloy.name} in {env.hardware.name}.\n" + user_prompt
     
@@ -176,6 +178,7 @@ def get_model_message(client: OpenAI, step: int, obs, last_reward: float, histor
 
 
 def run_single_task(task_name: str, client: OpenAI) -> None:
+    """Run a single evaluation task (easy/medium/hard-bake) and emit [START]/[STEP]/[END] logs."""
     # We now map tasks to entirely different physical scenarios!
     TASK_CONFIG = {
         "easy-bake": {"difficulty": AgentGrade.EASY, "alloy": "Al_96_Cu_4", "hardware": "lab_scale"},
@@ -254,6 +257,7 @@ def run_single_task(task_name: str, client: OpenAI) -> None:
 
 
 def main() -> None:
+    """Entry point: run all three evaluation tasks (easy-bake, medium-bake, hard-bake) sequentially."""
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
     
     tasks = ["easy-bake", "medium-bake", "hard-bake"]

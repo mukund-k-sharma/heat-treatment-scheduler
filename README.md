@@ -16,266 +16,94 @@ tags:
   - semi-markov decision process (SMDP)
 ---
 
-# Heat Treatment Scheduler - Continuous Digital Twin (V2)
+# 🏭 Continuous Heat Treatment Digital Twin: Predictive Braking with GRPO
 
-A physics-informed reinforcement learning environment designed for the **Meta PyTorch OpenEnv Hackathon Grand Finale**.
+**Hugging Face Space:** [heat-treatment-scheduler](https://huggingface.co/spaces/mukundnjoy/heat-treatment-scheduler)  
+**Training Notebook (Colab):** [TRL.ipynb](https://colab.research.google.com/drive/1mdsMleIwfpBrLe2Csb2GTmKqZXQbGjC3?usp=sharing)  
+**Presentation Deck:** [Heat Treatment Scheduler - Digital Twin (V2)](https://docs.google.com/presentation/d/1ZHcN1Glm7zaK1rs2FiZDN-AXNNFXhR61vBk14T-eZh8/edit?usp=sharing)
 
-This environment evaluates an AI agent's ability to execute **Long-Horizon Planning & Instruction Following**. Operating as a continuous **Semi-Markov Decision Process (SMDP)**, the agent acts as *an industrial Metallurgical Process Controller*, executing complex thermal recipes while predictively managing non-linear thermodynamic constraints like thermal inertia and oxidation insulation.
+## Overview
 
-## The Challenge
+Built for the **Meta PyTorch OpenEnv Hackathon Grand Finale** (Theme: *Long-Horizon Planning & Instruction Following*).
 
-Agents must execute multi-stage thermal recipes (e.g., T6 tempering) to grow nanoprecipitates to an exact target radius without:
+Precipitation hardening of aerospace alloys (like Ti-6Al-4V) requires extreme thermal precision to hit a target nanoprecipitate radius (e.g., 22.5 nm). Under-aging leaves the material weak; over-aging or melting destroys the casting.
 
-- **Melting** the material (T ≥ T_melt) → Catastrophic -200 reward
-- **Over-coarsening** the material (r > r_target_max) → -100 reward  
-- **Wasting time/energy** (high temperatures and long durations) → Continuous penalty.
+Standard RL struggles with this because the physical environment is continuous and highly non-linear due to thermal mass lag and surface oxidation insulation. We built a cloud-distributed digital twin that uses **Meta's OpenEnv** to simulate continuous thermodynamics, and trained an LLM via **GRPO** to execute "predictive braking" to hit the exact target radius.
 
-**The Core Difficulty:** Because of massive thermal inertia (lag), the agent must learn **"Predictive Braking"** — cutting the furnace heat long before the material reaches the target temperature to prevent residual heat from causing catastrophic `Ostwald Ripening`.
+### The Core Challenge
 
----
+The furnace air temperature changes instantly, but the material's core temperature follows Newton's Law of Cooling — creating massive thermal inertia. A 50 cm × 200 cm titanium casting can take hours to equilibrate. The agent must learn to cut the furnace heat **long before** the material reaches the target temperature, to prevent residual heat from triggering catastrophic Ostwald Ripening (grain coarsening).
+
+### Example Task
+
+> *"Execute a T6 treatment on Titanium Ti-6Al-4V in a massive industrial casting. First, solutionize by holding above 1000°C for 2 hours. Next, rapidly quench below 200°C. Finally, execute an artificial aging phase to grow nanoprecipitates to exactly 22.5 nm."*
+
+The agent must interpret this multi-stage recipe, make micro-adjustments (1 minute) during critical phase transitions, and macro-holds (hours) during steady-state baking — all while predictively managing thermal lag.
+
+### Key Innovations
+
+- **Continuous SMDP**: Unlike standard discrete RL, actions are `[temperature_delta, duration_minutes]` pairs solved via ODE integration — the agent chooses *how long* to hold each furnace state (1 min to 10 hours).
+- **Configuration-Driven Physics**: 7 alloys × 3 hardware geometries, dynamically loaded from JSON — zero-code evaluation of new materials.
+- **Three Coupled ODEs**: Heat transfer (Newton's Law), oxidation insulation (Arrhenius), and precipitate growth (Arrhenius + phase thresholds) create a realistic feedback loop.
+- **Dense Reward Shaping**: Proximity bonuses, energy/time penalties, catastrophic failure penalties (melting: −200, over-coarsening: −100) guide learning without sparse-reward traps.
+
+## Deep Dives
+
+- 🏗️ **[System Architecture](docs/architecture.md):** How we split the OpenEnv Physics Server (Hugging Face) from the Unsloth ML Optimizer (Google Colab). Covers server API, observation/action spaces, configuration system, project structure, data flow, and deployment.
+- ⚛️ **[Physics Engine](docs/physics.md):** The continuous ODEs, Arrhenius kinetics, Newton's Law of Cooling, oxidation dynamics, and phase-dependent precipitate growth powering the digital twin. Includes the full reward model and solver integration details.
 
 ## Quick Start
 
-### 1. Prerequisites
+### Prerequisites
 
 - Python 3.10+
 - OpenEnv framework (`pip install openenv-core`)
 
-### 2. Server + Client Example
-
-**Using uv (Recommended):**
+### Server + Client
 
 ```bash
-cd heat_treatment_scheduler
+# Using uv (Recommended)
 uv sync
 uv run --project . server --port 8000
-```
 
-**Running Streamlit dashboard:**
-
-```bash
+# Streamlit dashboard
 uv run streamlit run ui.py
-```
 
-**Using Docker:**
-
-```bash
+# Using Docker
 docker build -t heat_treatment_scheduler_env:latest .
 docker run -p 8000:8000 heat_treatment_scheduler_env:latest
 ```
 
-### 3. Run the LLM Agent Baseline
-
-To evaluate the LLM agent against the three distinct material/hardware scenarios, configure your proxy and run the inference script:
+### Run the LLM Agent Baseline
 
 ```bash
-# Set the required environment variables (prioritizes API_KEY for proxy routing)
 export API_BASE_URL="https://router.huggingface.co/v1"
-export API_KEY="your_injected_proxy_key"
+export API_KEY="your_hf_token"
 export MODEL_NAME="Qwen/Qwen2.5-72B-Instruct"
-
-# Run the agent evaluation
 python inference.py
 ```
 
-## The Architecture & Physics Engine
+This evaluates three tasks — `easy-bake` (Al-2024, lab scale), `medium-bake` (Steel 1095, industrial billet), and `hard-bake` (Ti-6Al-4V, massive casting) — with increasing difficulty.
 
-Unlike standard discrete reinforcement learning environments, this Digital Twin is powered by a continuous ODE solver (`scipy.integrate.solve_ivp`).
+## Training Results
 
-**Key classes:**
+By step ~150, GRPO optimized the multi-step trajectories, allowing the agent to successfully brake the furnace temperature and park the precipitate radius inside the strict 20.0 nm - 25.0 nm target window.
 
-- `HeatTreatmentSchedulerEnvironment`: Physics engine with continuous ODE solver + step/reset logic
-- `AgentGrade`: Difficulty enum controlling furnace temperature noise (σ_T)
-- OpenEnv integration: Automatic REST + WebSocket endpoints via `create_app`
+> **Training charts** (reward convergence, radius trajectories, and temperature management) are available in the [Presentation Deck](https://docs.google.com/presentation/d/1ZHcN1Glm7zaK1rs2FiZDN-AXNNFXhR61vBk14T-eZh8/edit?usp=sharing).
 
-### Project Structure
+Key results:
 
-```text
-heat_treatment_scheduler/
-├── __init__.py
-├── client.py              # Client (EnvClient subclass)
-├── Dockerfile             # Docker configuration
-├── hardware.json          # Extrinsic hardware geometries (thermal mass, surface area)
-├── materials.json         # Intrinsic alloy properties (Arrhenius constants, density, C_p)
-├── models.py              # Pydantic data models + physics constants
-├── inference.py           # LLM agent baseline
-├── logging_config.py      # Logging setup
-├── openenv.yaml           # OpenEnv metadata
-├── pyproject.toml         # Dependencies & build config
-├── ui.py                  # Streamlit interactive dashboard
-├── README.md              # This file
-└── server/
-    ├── __init__.py
-    ├── app.py             # FastAPI/OpenEnv server
-    └── heat_treatment_scheduler_environment.py  # Core physics engine (ODE solver)
-```
+- **Reward Convergence**: The GRPO reward gradient shows the agent learning to avoid melting penalties and converging on positive terminal rewards.
+- **Radius Trajectory**: The physical precipitate radius converges on the 22.5 nm target within the 20.0–25.0 nm success window.
+- **Temperature Management**: The agent learns to manage thermal lag and oxidation insulation without breaching the 1600°C failure threshold.
 
-### Physics Engine
+## Post-Training & Self-Improvement
 
-#### 1. The Action Space (SMDP)
+The architecture natively supports generating high-quality offline datasets for preference optimization:
 
-The action space is a decoupled **[Action, Duration]** pair, perfectly mirroring how human engineers program industrial machines via Thermal Recipes.
-
-1. `action_num` **(Discrete, 0-5)**: Temperature control (-50°C, -10°C, 0°C, +10°C, +50°C, Terminate).
-
-2. `duration_minutes` **(Continuous, 1.0 to 600.0)**: How long to hold the furnace state.
-
-#### 2. Heat Transfer (Thermal Mass & Lag)
-
-The furnace air temperature (`T_furnace`) changes instantly, but the material's core temperature (`T_material`) follows **Newton's Law of Cooling**:
-
-$$ \frac{dT_{material}}{dt} = \frac{h(t) \cdot A_{surface} \cdot (T_{furnace} - T_{material})}{m \cdot C_p} $$
-
-Where:
-
-- `m` (mass) is calculated dynamically from the alloy's density.
-- `C_p` is the specific heat capacity loaded from `materials.json`.
-- `h(t)` is the effective Heat Transfer Coefficient. This decays over time as surface oxidation builds up at high temperatures, acting as an insulator.
-
-#### 3. Dynamic Oxidation Kinetics (Arrhenius Insulation)
-
-The effective heat transfer coefficient $h(t)$ decays as surface oxidation builds up. Oxidation is calculated continuously via Arrhenius kinetics:
-
-$$ \frac{d(ox)}{dt} = A_{ox} \cdot \exp\left(-\frac{E_{ox}}{R(T_{material} + 273.15)}\right) \cdot (0.8 - ox) $$
-
-Where:
-
-- `A_ox` and `E_ox` are the pre-exponential factor and activation energy for oxidation, loaded from `materials.json`.
-- The term `(0.8 - ox)` acts as a *saturation term*, capping the insulation effect at **80%**. As the oxide layer thickens, its growth slows down.
-
-#### 4. Precipitate Growth (Arrhenius + Phase Thresholds)
-
-The base reaction rate `k(T)` for precipitate growth is driven by the Arrhenius equation:
-
-$$ k(T) = A \cdot \exp\left(-\frac{E}{R(T_{material} + 273.15)}\right) $$
-
-Where:
-
-- `A` is the pre-exponential factor and `E` is the activation energy for precipitate growth (from `materials.json`).
-- `R` is the universal gas constant (8.314 J/(mol·K)).
-
-The actual growth rate `dr/dt` is determined by the current thermal regime relative to the alloy's melting temperature (`T_melt`):
-
-| Regime | Temperature Range | Growth Rate (`dr/dt`) | Physics |
-| -------- | ------------------- | ----------------------- | --------- |
-| **Frozen** | T < 0.35 * T_melt | 0 | Atomic diffusion is negligible. Material remains in initial microstructure. |
-| **Growth** | 0.35-0.68 * T_melt | $k(T) \cdot (1 - \frac{r}{R_{MAX}})$ | Diffusion-controlled. Rate-limiting factor: atomic diffusion in the solid. The **SWEET SPOT**. |
-| **Ripening** | 0.68-1.0 * T_melt | $k(T) \cdot (\frac{r}{R_{MAX}})$ | Grain coarsening (Ostwald ripening). Material becomes brittle and loses mechanical properties. |
-| **Melting** | T ≥ T_melt | 0 | Material breaks down. Crystalline structure dissolves. Episode terminates. |
-
-Where **R_MAX** is the maximum target radius of the material.
-
-**Note**: The saturation factor $(1 - r/R_{MAX})$ acts as emergent **"Parking Brake"**, naturally slowing growth in the Controlled Growth phase as the radius approaches the target, allowing precise holds.
-
-## Configuration-Driven Physics
-
-The environment dynamically loads physics properties, allowing **zero-code** evaluation of entirely new alloys and geometries.
-
-1. `materials.json` **(Intrinsic Properties)** - Defines physical constants ($A$, $E$, Melting Points, Oxidation Rates, Specific Heat).
-    - `Al_96_Cu_4` (Aluminum 2024 - Default)
-    - `Al_98_Cu_2` (Aluminum Al-2wt%Cu)
-    - `Ti_6Al_4V` (Titanium Grade 5)
-    - `Mg_AZ31B` (Magnesium AZ31B)
-    - `Fe_99_C_1` (High-Carbon Steel 1095)
-    - `inconel_718` (Inconel 718)
-    - `cantor_equiatomic` (Cantor Alloy)
-
-2. `hardware.json` **(Extrinsic Properties)** : Defines geometry affecting thermal mass and lag.
-    - `industrial_standard` (Standard medium-weight billet - Default)
-    - `lab_scale` (Small sample, low thermal mass)
-    - `massive_casting` (Huge thermal mass, extremely sluggish response)
-
-### Difficulty Levels (Curriculum Learning)
-
-Control environment stochasticity:
-
-```python
-from heat_treatment_scheduler.server import AgentGrade
-
-AgentGrade.EASY      # σ_T=1°C   (Clean baseline)
-AgentGrade.MEDIUM    # σ_T=2°C   (Realistic)
-AgentGrade.HARD      # σ_T=3°C   (Challenging)
-```
-
-**Recommended training path**: EASY → MEDIUM → HARD
-
-## Server API & Observations
-
-### Observation Space (7 Values, All Normalized [0,1])
-
-| Field | Meaning | Range |
-| ------- | --------- | ------- |
-| `time` | Elapsed time / TIME_MAX (180,000s) | [0, 1] |
-| `temperature` | Current material core temp / alloy.temp_max | [0, 1] |
-| `radius` | Current radius / alloy.r_max_clip | [0, 1] |
-| `target_radius` | Target radius / alloy.r_max_clip | [0, 1] |
-| `radius_error` | (current radius - target radius) / alloy.r_max_clip | [-1, 1] |
-| `temperature_phase` | Regime indicator | [0, 2], 0=Frozen, 1=Growth, 2=Ripening |
-| `remaining_time` | Time left / TIME_MAX | [0, 1] |
-
-### HTTP Endpoints
-
-**POST /reset** → Reset to initial state
-
-```json
-{
-  "observation": {
-    "time": 0.0, 
-    "temperature": 0.29, 
-    "radius": 0.033,
-    "target_radius": 0.83, 
-    "radius_error": -0.8,
-    "temperature_phase": 0.0, 
-    "remaining_time": 1.0,
-    "done": false, 
-    "reward": 0.0
-  }
-}
-```
-
-**POST /step** → Execute action
-
-```json
-{
-  "request": {
-    "action_num": 3,
-    "duration_minutes": 120.0
-  },
-  "response": {
-    "observation": {...},
-    "reward": 15.42,
-    "done": false
-  }
-}
-```
-
-**GET /state** → Get raw environment state
-
-```json
-{
-  "episode_id": "uuid",
-  "step_count": 5,
-  "time": 7200.0,
-  "temperature": 685.4,
-  "radius": 12.1,
-  "target_radius": 14.0
-}
-```
-
-## Evaluation & Post-Training
-
-The dense reward model allows for high-quality trajectory generation. Successful trajectories (demonstrating proper predictive braking) and failed trajectories (overshooting due to thermal lag) can be paired.
-
-This creates the ideal dataset for `Direct Preference Optimization (DPO)` or `Supervised Fine-Tuning (SFT)`, proving that an open-source model can self-improve to internalize continuous physical dynamics.
-
-## References & Further Reading
-
-For detailed physics explanations and code comments, see:
-
-- [server/heat_treatment_scheduler_environment.py](server/heat_treatment_scheduler_environment.py) — Complete physics model with inline comments
-- [models.py](models.py) — Type definitions and constant documentation
-- [client.py](client.py) — Protocol and communication details
-- [inference.py](inference.py) — Example LLM agent integration
+1. **Trajectory Generation**: Run frontier LLMs against the physics engine to generate thousands of thermal trajectories.
+2. **Preference Pairing**: Using the dense reward model, trajectories are ranked. Failed trajectories (overshooting due to thermal lag) vs. successful trajectories (proper predictive braking) are paired → `post_training/datasets/dpo_dataset.jsonl`.
+3. **Self-Improvement**: Apply Direct Preference Optimization (DPO) on `unsloth/Llama-3.2-1B-Instruct` using these paired trajectories → `post_training/train_dpo.ipynb`. Goal: prove a small, self-improved model can internalize continuous differential equations and outperform a zero-shot frontier model.
 
 ## License
 

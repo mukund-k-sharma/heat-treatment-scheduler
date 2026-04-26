@@ -204,6 +204,20 @@ class HeatTreatmentSchedulerEnvironment(Environment):
 
     
     def reset(self, seed: int | None = None, episode_id: str | None = None, **kwargs: Any):
+        """
+        Reset the environment to its initial state for a new episode.
+
+        Restores all state variables (time, temperatures, radius, oxidation) to their
+        initial values and returns the initial normalized observation.
+
+        Args:
+            seed: Optional random seed for reproducibility.
+            episode_id: Optional UUID string to identify this episode.
+            **kwargs: Additional keyword arguments (for interface compatibility).
+
+        Returns:
+            HeatTreatmentSchedulerObservation with initial state (done=False, reward=0.0).
+        """
         # =============== SEED =================
         if seed is not None:
             self.SEED = seed
@@ -226,6 +240,7 @@ class HeatTreatmentSchedulerEnvironment(Environment):
 
     
     def _get_state(self, episode_id : str | None = None) -> HeatTreatmentSchedulerState:
+        """Construct a raw (unnormalized) state snapshot for UI, logging, and debugging."""
         return HeatTreatmentSchedulerState(
             episode_id=episode_id or str(uuid4()),
             step_count=getattr(self, "step_count", 0),
@@ -237,6 +252,20 @@ class HeatTreatmentSchedulerEnvironment(Environment):
 
 
     def _get_obs(self, done=False, reward=0.0) -> HeatTreatmentSchedulerObservation:
+        """
+        Build a normalized observation for the agent.
+
+        All values are normalized to [0, 1] (or [-1, 1] for radius_error) for
+        stable neural network training. Also computes the categorical temperature
+        phase indicator (Frozen=0, Growth=1, Ripening=2).
+
+        Args:
+            done: Whether the episode has ended.
+            reward: The reward for the current step.
+
+        Returns:
+            HeatTreatmentSchedulerObservation with normalized state values.
+        """
         # Determine temperature phase based on alloy melting point
         if self.T_material < (self.alloy.temp_melt * 0.35):
             phase = 0.0  # Frozen: no growth
@@ -312,7 +341,7 @@ class HeatTreatmentSchedulerEnvironment(Environment):
             self.oxidation_factor = min(0.8, solution.y[2][-1])
         except Exception as e:
             logger.error(f"ODE solver failed : {e}")
-            return self._get_obs(done=True, reward=-500) # TODO: Catastrophic physics failure
+            return self._get_obs(done=True, reward=-500)
 
         # Update time
         self.t += duration_sec
@@ -325,6 +354,28 @@ class HeatTreatmentSchedulerEnvironment(Environment):
 
 
     def _get_reward(self, done=False, duration_sec=0.0):
+        """
+        Compute the dense, multi-component reward for the current step.
+
+        Components:
+        1. Proximity shaping: -0.1·|error| - 0.01·error² (always applied)
+        2. Energy penalty: -0.001·T_material·(Δt/3600)
+        3. Time penalty: -0.00028·Δt
+        4. Warning zone: extra penalty when T_material > T_melt - 100°C
+
+        Terminal bonuses/penalties:
+        - Success (r in target window): +100 + Gaussian proximity bonus
+        - Over-coarsened (r > r_target_max): -100
+        - Melted (T >= T_melt): -200
+        - Other (timeout, etc.): -50
+
+        Args:
+            done: Whether the episode is ending on this step.
+            duration_sec: Duration of the action in seconds.
+
+        Returns:
+            float: The scalar reward value.
+        """
         error = abs(self.r - self.r_target)
         step_reward = -0.1 * error - 0.01 * (error ** 2)
 

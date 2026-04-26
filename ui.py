@@ -1,5 +1,15 @@
 """
-Heat Treatment Digital Twin - Streamlit Frontend
+Heat Treatment Digital Twin - Streamlit Frontend.
+
+Interactive dashboard for manually controlling and visualizing the Heat Treatment
+Scheduler environment. Runs the ODE physics engine locally (no network required)
+and provides real-time Plotly charts for:
+- Thermal inertia visualization (furnace air vs. material core temperature)
+- Nanoprecipitate growth trajectory vs. target radius
+- Step-by-step metrics (elapsed time, temperature, radius, reward)
+
+The dashboard exposes SMDP controls (action selection + duration slider) for
+manual experimentation with the physics engine.
 """
 import streamlit as st
 import pandas as pd
@@ -30,6 +40,7 @@ if "score" not in st.session_state:
 
 # --- HELPERS ---
 def reset_env():
+    """Reset the environment and initialize the history DataFrame with the initial state."""
     result = st.session_state.env.reset()
     state = st.session_state.env.state # Accessed as a property, not a method!
     
@@ -46,6 +57,7 @@ def reset_env():
     st.session_state.score = 0.0
 
 def step_env(action_num: int, duration: float):
+    """Execute one SMDP action and append the resulting state to the session history."""
     action = HeatTreatmentSchedulerAction(action_num=action_num, duration_minutes=duration)
     
     current_furnace = st.session_state.history.iloc[-1]["furnace_temp"]
