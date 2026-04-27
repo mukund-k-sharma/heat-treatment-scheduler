@@ -307,25 +307,25 @@ The V3 reward function included an efficiency bonus for completing episodes in f
 
 ### Project Structure
 
-```
+```text
 heat-treatment-scheduler/
 ├── server/
 │   ├── app.py                              # FastAPI + OpenEnv server (max_concurrent_envs=8)
 │   └── heat_treatment_scheduler_environment.py  # Core ODE physics engine + task routing
+├── notebooks/
+│   └── TRL.ipynb                           # GRPO training notebook (Colab) — includes V5 reward function
 ├── materials.json                          # 7 alloy configurations (calibrated Arrhenius constants)
 ├── hardware.json                           # 3 hardware geometries (thermal mass)
 ├── models.py                               # Pydantic data models + physics constants
 ├── inference.py                            # LLM agent baseline (multi-task evaluation)
 ├── ui.py                                   # Streamlit interactive dashboard
-├── post_training/colab/
-│   ├── TRL.ipynb                           # GRPO training notebook
-│   └── reward_func_v5.py                   # WebSocket-based reward function
 ├── docs/
 │   ├── architecture.md                     # Full system architecture documentation
 │   └── physics.md                          # ODE equations + reward model details
 ├── openenv.yaml                            # OpenEnv metadata specification
 ├── Dockerfile                              # HF Space deployment
-└── BLOG.md                                 # This file
+├── BLOG.md                                 # This file
+└── README.md                               # Project overview
 ```
 
 ### Observation Space (7 normalized values)

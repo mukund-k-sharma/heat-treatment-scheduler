@@ -89,7 +89,7 @@ app = create_app(
     HeatTreatmentSchedulerAction,       # Action type
     HeatTreatmentSchedulerObservation,  # Observation type
     env_name="heat_treatment_scheduler", # Environment identifier
-    max_concurrent_envs=8,   # GRPO needs 4 concurrent sessions (num_geneerations=4)
+    max_concurrent_envs=8,   # GRPO needs 4 concurrent sessions (num_generations=4)
                              # Set to 8 for headroom
 )
 

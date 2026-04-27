@@ -35,7 +35,7 @@ Hosted on a **Hugging Face Space** (Docker SDK), this acts as the digital twin.
 | **Routing** | Exposes `/reset`, `/step`, `/state`, `/schema`, and `/ws` endpoints |
 | **ODE Solver** | SciPy `solve_ivp` with RK45, max step 120 s (evaluated every 2 minutes of sim-time) |
 | **Validation** | Pydantic models enforce physical boundaries (e.g., `duration_minutes ∈ [1, 600]`, `action_num ∈ [0, 5]`) |
-| **Concurrency** | `SUPPORTS_CONCURRENT_SESSIONS = True`; configurable via `max_concurrent_envs` in `app.py` |
+| **Concurrency** | `SUPPORTS_CONCURRENT_SESSIONS = True`; `max_concurrent_envs=8` in `app.py` (GRPO's `num_generations=4` requires 4 parallel WebSocket sessions; set to 8 for headroom) |
 
 ### Server Endpoints
 
@@ -171,27 +171,26 @@ heat-treatment-scheduler/
 │
 ├── server/
 │   ├── __init__.py                 # Server package init
-│   ├── app.py                      # FastAPI/OpenEnv app factory
-│   └── heat_treatment_scheduler_environment.py  # Core physics engine (ODE solver)
+│   ├── app.py                      # FastAPI/OpenEnv app factory (max_concurrent_envs=8)
+│   └── heat_treatment_scheduler_environment.py  # Core physics engine (ODE solver + task routing)
 │
-├── materials.json                  # Intrinsic alloy properties (7 alloys)
+├── notebooks/
+│   └── TRL.ipynb                   # GRPO training notebook (Colab) — includes V5 reward function
+│
+├── materials.json                  # Intrinsic alloy properties (7 alloys, calibrated A values)
 ├── hardware.json                   # Extrinsic hardware geometries (3 setups)
 ├── openenv.yaml                    # OpenEnv metadata + task definitions
 ├── pyproject.toml                  # Dependencies & build config
 ├── Dockerfile                      # Multi-stage Docker build
 ├── pre_validation_script.sh        # OpenEnv submission validator
 │
-├── post_training/
-│   ├── colab/TRL.ipynb             # GRPO training notebook (Colab)
-│   ├── datasets/dpo_dataset.jsonl  # DPO preference pairs
-│   └── train_dpo.ipynb             # DPO fine-tuning notebook
-│
 ├── docs/
 │   ├── architecture.md             # This file
 │   ├── physics.md                  # Physics engine deep-dive
 │   └── FINALE_PROBLEM.md           # Hackathon problem statement
 │
-└── papers/                         # Reference literature
+├── BLOG.md                         # Technical writeup / blog post
+└── README.md                       # Project overview
 ```
 
 ---
