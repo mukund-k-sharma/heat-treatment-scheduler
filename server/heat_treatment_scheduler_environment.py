@@ -134,8 +134,15 @@ class HeatTreatmentSchedulerEnvironment(Environment):
 
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
     R: float = 8.314 # Universal Gas Constant
-    
-    def __init__(self, t=0.0, T=20.0, r=0.0, difficulty=AgentGrade.EASY, alloy_key="Al_96_Cu_4", hardware_key="industrial_standard"):
+
+    # Task-name to config mapping (used by reset when task_name is provided)
+    TASK_CONFIG = {
+        "easy-bake":   {"difficulty": AgentGrade.EASY,   "alloy_key": "Al_96_Cu_4",  "hardware_key": "lab_scale"},
+        "medium-bake": {"difficulty": AgentGrade.MEDIUM, "alloy_key": "Fe_99_C_1",   "hardware_key": "industrial_standard"},
+        "hard-bake":   {"difficulty": AgentGrade.HARD,   "alloy_key": "Ti_6Al_4V",   "hardware_key": "massive_casting"},
+    }
+
+    def __init__(self, t=0.0, T=20.0, r=0.0, difficulty=AgentGrade.EASY, alloy_key="Al_96_Cu_4", hardware_key="lab_scale"):
         """
         Initializes the environment state and dynamically loads physical properties.
         
@@ -203,21 +210,40 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         self.reset()
 
     
-    def reset(self, seed: int | None = None, episode_id: str | None = None, **kwargs: Any):
+    def reset(self, seed: int | None = None, episode_id: str | None = None, task_name: str | None = None, **kwargs: Any):
         """
         Reset the environment to its initial state for a new episode.
 
         Restores all state variables (time, temperatures, radius, oxidation) to their
         initial values and returns the initial normalized observation.
 
+        If task_name is provided, the environment reconfigures itself with the
+        corresponding alloy, hardware, and difficulty from TASK_CONFIG.
+
         Args:
             seed: Optional random seed for reproducibility.
             episode_id: Optional UUID string to identify this episode.
+            task_name: Optional task identifier (e.g. 'easy-bake') to reconfigure
+                       the alloy, hardware, and difficulty for this episode.
             **kwargs: Additional keyword arguments (for interface compatibility).
 
         Returns:
             HeatTreatmentSchedulerObservation with initial state (done=False, reward=0.0).
         """
+        # =============== TASK ROUTING =================
+        if task_name and task_name in self.TASK_CONFIG:
+            cfg = self.TASK_CONFIG[task_name]
+            self.__init__(
+                t=self.init_t,
+                T=self.init_T_furnace,
+                r=0.0,
+                difficulty=cfg["difficulty"],
+                alloy_key=cfg["alloy_key"],
+                hardware_key=cfg["hardware_key"],
+            )
+            return self._get_obs(done=False, reward=0.0)
+        # ==============================================
+
         # =============== SEED =================
         if seed is not None:
             self.SEED = seed
