@@ -173,7 +173,7 @@ class HeatTreatmentSchedulerAction(Action):
     """
     
     # Instance variable holding the selected action
-    action_num: int = Field(description="0-5 discrete temperature control actions", le=5)
+    action_num: int = Field(description="0-5 discrete temperature control actions", ge=0, le=5)
     # Hold a temperature: min = 1 minute (micro-adjustments) and max: 10 hours per step
     duration_minutes: float = Field(default=60.0, description="Duration to hold this temperature state in minutes.", ge=1.0, le=600.0)
 

@@ -89,9 +89,8 @@ app = create_app(
     HeatTreatmentSchedulerAction,       # Action type
     HeatTreatmentSchedulerObservation,  # Observation type
     env_name="heat_treatment_scheduler", # Environment identifier
-    max_concurrent_envs=1,  # Allow only 1 concurrent session by default
-                            # Increase this number to allow more concurrent WebSocket sessions
-                            # (requires environment to properly isolate state between instances)
+    max_concurrent_envs=8,   # GRPO needs 4 concurrent sessions (num_geneerations=4)
+                             # Set to 8 for headroom
 )
 
 
