@@ -7,17 +7,19 @@ This project splits the Reinforcement Learning pipeline into two distinct micros
 ## High-Level Topology
 
 ```text
-┌──────────────────────────────────────────┐       HTTP POST        ┌─────────────────────────────────────────┐
+┌──────────────────────────────────────────┐     WebSocket (WSS)     ┌─────────────────────────────────────────┐
 │        ML Policy Optimizer (Client)      │  ───────────────────►  │       Physics Engine (Server)           │
 │        Google Colab T4 GPU               │                        │       Hugging Face Space                │
 │                                          │  ◄───────────────────  │                                        │
 │  • Llama-3.2-1B (4-bit, Unsloth)         │   JSON Observation     │  • FastAPI + OpenEnv                   │
-│  • GRPO via TRL                          │   + Reward Gradient     │  • SciPy ODE solver (solve_ivp)        │
-│  • api_physics_reward_func()             │                        │  • Pydantic-validated action/obs types  │
+│  • GRPO via TRL                          │   + Reward Signal       │  • SciPy ODE solver (solve_ivp)        │
+│  • WebSocket reward function (V5)        │                        │  • Task routing (easy/medium/hard)     │
 └──────────────────────────────────────────┘                        └─────────────────────────────────────────┘
 ```
 
-The ML client never simulates physics — it only parses LLM outputs, clamps them, and forwards `POST /step` requests. The server owns all thermodynamic truth.
+The ML client never simulates physics — it only parses LLM outputs, clamps them, and forwards actions over WebSocket. The server owns all thermodynamic truth.
+
+> **Critical**: OpenEnv's HTTP `/reset` and `/step` endpoints are **stateless** — each call creates and destroys a fresh environment. For multi-step episodes (where temperature must accumulate), use the WebSocket `/ws` endpoint which maintains a persistent, stateful session per connection.
 
 ---
 
@@ -39,11 +41,11 @@ Hosted on a **Hugging Face Space** (Docker SDK), this acts as the digital twin.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/reset` | Reset the environment to initial state; returns normalized observation |
-| `POST` | `/step` | Execute an `[action_num, duration_minutes]` pair; returns observation, reward, done |
+| `POST` | `/reset` | Reset the environment (stateless — creates new env per call) |
+| `POST` | `/step` | Execute an action (stateless — creates new env per call) |
 | `GET` | `/state` | Return raw (unnormalized) environment state for UI/debugging |
 | `GET` | `/schema` | Return JSON schemas for Action and Observation types |
-| `WS` | `/ws` | WebSocket endpoint for persistent low-latency client sessions |
+| **`WS`** | **`/ws`** | **WebSocket endpoint for stateful sessions (used for training)** |
 
 ### Observation Space (7 values, all normalized)
 

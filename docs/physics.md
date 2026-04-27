@@ -92,10 +92,12 @@ The actual growth rate $dr/dt$ depends on the current thermal regime, defined re
 |-------|-------------------|----------------------|---------|
 | **Frozen** | $T < 0.35 \cdot T_{melt}$ | $0$ | Atomic diffusion is negligible. Material remains in initial microstructure. |
 | **Controlled Growth** | $0.35 \cdot T_{melt} \leq T \leq 0.68 \cdot T_{melt}$ | $k(T) \cdot \left(1 - \dfrac{r}{R_{max}}\right)$ | Diffusion-controlled growth. **The sweet spot.** |
-| **Ostwald Ripening** | $0.68 \cdot T_{melt} < T \leq T_{melt}$ | $k(T) \cdot \dfrac{r}{R_{max}}$ | Grain coarsening — material becomes brittle. **Failure mode.** |
+| **Ostwald Ripening** | $0.68 \cdot T_{melt} < T \leq T_{melt}$ | $k(T) \cdot \dfrac{r}{R_{max}} \cdot \left(1 - \dfrac{r}{R_{max}}\right)$ | Grain coarsening with saturation cap. **Failure mode.** |
 | **Melting** | $T > T_{melt}$ | $0$ | Crystalline structure dissolves. Episode terminates catastrophically. |
 
-Where $R_{max}$ = `alloy.r_target_max` — the maximum target radius for the alloy.
+Where $R_{max}$ = `alloy.r_max_clip` — the physical ceiling radius for the alloy.
+
+> **ODE Stability**: All state variables are clamped inside the derivative function ($r \in [0, R_{max}]$, $ox \in [0, 0.8]$) and after ODE integration. This prevents numerical blowup from the positive-feedback ripening term. Additionally, if $r \geq R_{max}$, growth is forced to zero.
 
 ### The Natural "Parking Brake"
 
@@ -104,7 +106,7 @@ In the **Controlled Growth** phase, the saturation factor $(1 - r/R_{max})$ crea
 - When $r \ll R_{max}$: growth is fast ($dr/dt \approx k(T)$)
 - When $r \to R_{max}$: growth slows to near-zero ($dr/dt \to 0$)
 
-This allows the agent to "park" the precipitate radius at the target by holding the material in the Growth phase. However, any overshoot into the Ripening phase reverses this dynamic — larger precipitates grow *faster*, creating a runaway failure.
+This allows the agent to "park" the precipitate radius at the target by holding the material in the Growth phase. In the Ripening phase, the additional $(1 - r/R_{max})$ saturation term prevents numerical blowup while maintaining the physically correct positive-feedback characteristic of Ostwald ripening.
 
 ### Phase Thresholds by Alloy
 
@@ -119,7 +121,7 @@ This allows the agent to "park" the precipitate radius at the target by holding 
 
 ## 4. Reward Model
 
-The reward function shapes the agent's policy toward precision, efficiency, and safety.
+The reward function shapes the agent's policy toward precision, efficiency, and safety. All server-side rewards are clamped to $[-500, +500]$ to prevent float overflow from corrupting RL gradients.
 
 ### Per-Step Reward
 
