@@ -362,10 +362,10 @@ class HeatTreatmentSchedulerEnvironment(Environment):
                 events=self._melting_event  # Terminate integration if T >= T_melt
             )
 
-            # Extract final state
+            # Extract final state (clamp to physical bounds)
             self.T_material = solution.y[0][-1]
-            self.r = max(0.0, solution.y[1][-1])  # Clamp: ODE solver numerical noise can produce tiny negatives
-            self.oxidation_factor = min(0.8, solution.y[2][-1])
+            self.r = np.clip(solution.y[1][-1], 0.0, self.alloy.r_max_clip)  # Clamp to [0, r_max_clip]
+            self.oxidation_factor = np.clip(solution.y[2][-1], 0.0, 0.8)
         except Exception as e:
             logger.error(f"ODE solver failed : {e}")
             return self._get_obs(done=True, reward=-500)
@@ -404,6 +404,8 @@ class HeatTreatmentSchedulerEnvironment(Environment):
             float: The scalar reward value.
         """
         error = abs(self.r - self.r_target)
+        # Cap error to prevent float overflow (r_max_clip is the physical ceiling)
+        error = min(error, self.alloy.r_max_clip * 2)
         step_reward = -0.1 * error - 0.01 * (error ** 2)
 
         temp_penalty = 0.001 * self.T_material * (duration_sec / 3600.0)
@@ -413,23 +415,23 @@ class HeatTreatmentSchedulerEnvironment(Environment):
 
         if done:
             if self.r > self.alloy.r_target_max:
-                return reward - 100
+                return np.clip(reward - 100, -500, 500)
             
             if self.T_material >= self.alloy.temp_melt:
-                return reward - 200
+                return np.clip(reward - 200, -500, 500)
             
             if self.alloy.r_target_min <= self.r <= self.alloy.r_target_max:
                 target_reward = 100.0 * np.exp(-(error ** 2) / 10.0)
-                return reward + target_reward + 100.0
+                return np.clip(reward + target_reward + 100.0, -500, 500)
 
-            return reward - 50
+            return np.clip(reward - 50, -500, 500)
         
     
         warning_temp = self.alloy.temp_melt - 100.0
         if self.T_material > warning_temp:
             reward -= (self.T_material - warning_temp) * 0.05 * (duration_sec / 3600.0)
 
-        return reward
+        return np.clip(reward, -500, 500)
     
 
     def _physics_derivatives(self, t, y):
@@ -466,6 +468,10 @@ class HeatTreatmentSchedulerEnvironment(Environment):
 
         T_material, r, ox = y
 
+        # Clamp state variables to physical bounds (prevents ODE solver runaway)
+        r = np.clip(r, 0.0, self.alloy.r_max_clip)
+        ox = np.clip(ox, 0.0, 0.8)
+
         # 1. Heat Transfer (Newton's Law of Cooling) - Furnace
         # dT_material/dt = h(t) * A_surface * (T_furnace - T_material) / m * C_p
         h_effective = self.base_h * (1.0 - ox)
@@ -482,7 +488,7 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         # Based on material temperature, we need to calculate dr_dt, which varies as:
         #   Frozen Phase : dr/dt = 0
         #   Controlled Growth : dr/dt = k(T) * (1 - r/R_max_clip)
-        #   Ostwald ripening : dr/dt = k(T) * (r/R_max_clip)
+        #   Ostwald ripening : dr/dt = k(T) * (r/R_max_clip) [capped by saturation]
         #   melting phase : dr/dt = 0 (an episode terminates)
 
         if T_material < frozen_threshold:
@@ -490,8 +496,13 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         elif T_material <= ripening_threshold:
             dr_dt = k * (1.0 - (r / self.alloy.r_max_clip))
         elif T_material <= self.alloy.temp_melt:
-            dr_dt = k * (r / self.alloy.r_max_clip)
+            # Ostwald ripening with saturation cap to prevent runaway
+            dr_dt = k * (r / self.alloy.r_max_clip) * max(0.0, 1.0 - r / self.alloy.r_max_clip)
         else:
+            dr_dt = 0.0
+
+        # Hard cap: if r is already at ceiling, stop growth
+        if r >= self.alloy.r_max_clip:
             dr_dt = 0.0
 
         # 3. Oxidation Rate (Arrhenius)
@@ -499,7 +510,7 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         # d(ox)/dt = A_ox * exp(-E_ox / (R * (T_material + 273.15))) * (0.8 - ox)
         k_ox = self.alloy.A_ox * np.exp(-self.alloy.E_ox / (self.R * (T_material + 273.15)))
 
-        # Saturation: THe oxide layer caps at 0.8 (80% insulation)
+        # Saturation: The oxide layer caps at 0.8 (80% insulation)
         d_ox_dt = k_ox * (0.8 - ox) if ox < 0.8 else 0.0
 
         return [dT_mat_dt, max(dr_dt, 0.0), max(d_ox_dt, 0.0)]
