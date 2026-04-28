@@ -48,9 +48,11 @@ from scipy.integrate import solve_ivp
 try:
     from ..models import HeatTreatmentSchedulerAction, HeatTreatmentSchedulerObservation, HeatTreatmentSchedulerState, ALLOY_REGISTRY, HARDWARE_REGISTRY, TIME_MAX, TIME_MIN
     from ..logging_config import get_logger
+    from .rubrics import HeatTreatmentRubric
 except ImportError:
     from models import HeatTreatmentSchedulerAction, HeatTreatmentSchedulerObservation, HeatTreatmentSchedulerState, ALLOY_REGISTRY, HARDWARE_REGISTRY, TIME_MAX, TIME_MIN
     from logging_config import get_logger
+    from server.rubrics import HeatTreatmentRubric
 
 # Module logger
 logger = get_logger(__name__)
@@ -207,6 +209,13 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         self.init_r = r
         self._reset_count = 0
 
+        # Initialize composable rubric system (OpenEnv RFC 004)
+        # Creates a HeatTreatmentRubric with 4 weighted components:
+        #   proximity (40%), efficiency (15%), safety (25%), terminal (20%)
+        # This provides per-component introspection via env.rubric.named_rubrics()
+        rubric = HeatTreatmentRubric(self.alloy)
+        super().__init__(rubric=rubric)
+
         self.reset()
 
     
@@ -259,6 +268,9 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         self.T_material = self.init_T_material
         self.r = self.init_r
         self.oxidation_factor = 0.0 # Builds up over time at high heat
+
+        # Reset rubric state for new episode
+        self._reset_rubric()
 
         self._state = self._get_state(episode_id)
 
@@ -377,7 +389,13 @@ class HeatTreatmentSchedulerEnvironment(Environment):
         reward = self._get_reward(done=done, duration_sec=duration_sec)
         self._state = self._get_state(self._state.episode_id)
 
-        return self._get_obs(done=done, reward=reward)
+        obs = self._get_obs(done=done, reward=reward)
+
+        # Compute rubric scores for introspection (does not override reward)
+        # Access per-component scores via: env.rubric.proximity.last_score, etc.
+        self._apply_rubric(action, obs)
+
+        return obs
 
 
     def _get_reward(self, done=False, duration_sec=0.0):
