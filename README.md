@@ -30,7 +30,7 @@ Built for the **Meta PyTorch OpenEnv Hackathon Grand Finale** (Theme: *Long-Hori
 
 Precipitation hardening of aerospace alloys (like Ti-6Al-4V) requires extreme thermal precision to hit a target nanoprecipitate radius (e.g., 22.5 nm). Under-aging leaves the material weak; over-aging or melting destroys the casting.
 
-Standard RL struggles with this because the physical environment is continuous and highly non-linear due to thermal mass lag and surface oxidation insulation. We built a cloud-distributed digital twin that uses **Meta's OpenEnv** to simulate continuous thermodynamics, and trained an LLM via **GRPO** to execute "predictive braking" to hit the exact target radius.
+Standard RL struggles with this because the physical environment is continuous and highly non-linear due to thermal mass lag and surface oxidation insulation. I built a cloud-distributed digital twin that uses **Meta's OpenEnv** to simulate continuous thermodynamics, and trained an LLM via **GRPO** to execute "predictive braking" to hit the exact target radius.
 
 ### The Core Challenge
 
@@ -49,7 +49,7 @@ The furnace air temperature changes instantly, but the material's core temperatu
 ```text
 ┌──────────────────────────────────────────┐                        ┌─────────────────────────────────────────┐
 │        ML Policy Optimizer (Client)      │  ── WSS /ws ─────────► │       Physics Engine (Server)           │
-│        Google Colab T4 GPU               │                        │       Hugging Face Space (Docker)       │
+│        HF Space (GPU Notebook)           │                        │       Hugging Face Space (Docker)       │
 │                                          │  ◄── JSON Obs + R ──── │                                        │
 │  • Llama-3.2-1B (4-bit, Unsloth)         │                        │  • FastAPI + Meta OpenEnv              │
 │  • GRPO via TRL                          │                        │  • SciPy ODE solver (solve_ivp)        │
@@ -60,7 +60,7 @@ The furnace air temperature changes instantly, but the material's core temperatu
 
 ## Deep Dives
 
-- 🏗️ **[System Architecture](docs/architecture.md):** OpenEnv Physics Server (Hugging Face) + Unsloth ML Optimizer (Google Colab). Covers server API, observation/action spaces, configuration system, project structure, and deployment.
+- 🏗️ **[System Architecture](docs/architecture.md):** OpenEnv Physics Server (Hugging Face) + Unsloth ML Optimizer (HF Space GPU). Covers server API, observation/action spaces, configuration system, project structure, and deployment.
 - ⚛️ **[Physics Engine](docs/physics.md):** The continuous ODEs, Arrhenius kinetics, Newton's Law of Cooling, oxidation dynamics, and phase-dependent precipitate growth. Includes the reward model and solver integration.
 - 📝 **[Blog / Technical Writeup](BLOG.md):** Full narrative of the project, bug discovery journey, reward hacking analysis, and lessons learned.
 

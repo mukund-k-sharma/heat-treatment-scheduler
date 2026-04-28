@@ -7,7 +7,7 @@
 
 ## TL;DR
 
-We built a **continuous physics digital twin** of an industrial precipitation hardening furnace and trained a **1.2B parameter LLM** (Llama-3.2-1B-Instruct) to autonomously execute multi-stage thermal recipes using **GRPO (Group Relative Policy Optimization)**. The agent must learn "Predictive Braking" — cutting furnace heat long before the material reaches its target temperature — because thermal inertia means residual heat will keep cooking the alloy for hours after the furnace is shut off.
+I built a **continuous physics digital twin** of an industrial precipitation hardening furnace and trained a **1.2B parameter LLM** (Llama-3.2-1B-Instruct) to autonomously execute multi-stage thermal recipes using **GRPO (Group Relative Policy Optimization)**. The agent must learn "Predictive Braking" — cutting furnace heat long before the material reaches its target temperature — because thermal inertia means residual heat will keep cooking the alloy for hours after the furnace is shut off.
 
 The environment is powered by three coupled Ordinary Differential Equations (ODEs) solved in real-time via SciPy, not a lookup table or a game engine. The LLM doesn't see pixels or tokens — it reads normalized telemetry and outputs `[action, duration]` pairs that are integrated through continuous physics.
 
@@ -33,7 +33,7 @@ This creates a lethal trap: if the agent heats aggressively to grow precipitates
 
 ### The "Predictive Braking" Insight
 
-Just like a freight train can't stop on a dime, a massive casting can't cool instantly. The agent must learn to begin cooling **hours before** the precipitates reach target size, anticipating exactly how much residual growth will occur during the cool-down phase. We call this **Predictive Braking** — the core capability we want the LLM to internalize.
+Just like a freight train can't stop on a dime, a massive casting can't cool instantly. The agent must learn to begin cooling **hours before** the precipitates reach target size, anticipating exactly how much residual growth will occur during the cool-down phase. I call this **Predictive Braking** — the core capability I want the LLM to internalize.
 
 ### Why This Is Hard for RL
 
@@ -49,12 +49,12 @@ Just like a freight train can't stop on a dime, a massive casting can't cool ins
 
 ## 2. The Architecture: A Cloud-Distributed Digital Twin
 
-We split the system into two services connected over **WebSocket** (OpenEnv's stateful session protocol):
+The system is split into two services connected over **WebSocket** (OpenEnv's stateful session protocol):
 
 ```text
 ┌──────────────────────────────────────────┐                        ┌─────────────────────────────────────────┐
 │        ML Policy Optimizer (Client)      │  ── WSS /ws ─────────► │       Physics Engine (Server)           │
-│        Google Colab T4 GPU               │                        │       Hugging Face Space (Docker)       │
+│        HF Space (GPU Notebook)           │                        │       HF Space (Docker)                │
 │                                          │  ◄── JSON Obs + R ──── │                                        │
 │  • Llama-3.2-1B (4-bit, Unsloth)         │                        │  • FastAPI + Meta OpenEnv              │
 │  • GRPO via TRL                          │                        │  • SciPy ODE solver (solve_ivp)        │
@@ -62,9 +62,9 @@ We split the system into two services connected over **WebSocket** (OpenEnv's st
 └──────────────────────────────────────────┘                        └─────────────────────────────────────────┘
 ```
 
-**Why WebSocket?** OpenEnv's HTTP `/reset` and `/step` endpoints are **stateless by design** — each call creates a fresh environment instance, operates on it, then destroys it. For multi-step episodes where temperature must accumulate across steps, we use WebSocket `/ws` which maintains a persistent, stateful session per connection. This was a critical discovery during training (see Bug #4 below).
+**Why WebSocket?** OpenEnv's HTTP `/reset` and `/step` endpoints are **stateless by design** — each call creates a fresh environment instance, operates on it, then destroys it. For multi-step episodes where temperature must accumulate across steps, I use WebSocket `/ws` which maintains a persistent, stateful session per connection. This was a critical discovery during training (see Bug #4 below).
 
-**Why this split?** The physics engine is pure CPU (ODE integration) and needs to be always-on for concurrent training. The ML client needs a GPU for inference/backprop. Hugging Face Spaces give us a free, persistent CPU server; Google Colab gives us a free T4 GPU.
+**Why this split?** The physics engine is pure CPU (ODE integration) and needs to be always-on for concurrent training. The ML client needs a GPU for inference/backprop. Hugging Face Spaces provide a free, persistent CPU server; a separate HF Space with GPU handles the training notebook.
 
 ### The Physics Engine
 
@@ -99,7 +99,7 @@ In the Ostwald Ripening zone, growth follows $k(T) \cdot (r/R_{max}) \cdot (1 - 
 
 ### The Action Space (Semi-Markov Decision Process)
 
-Unlike standard RL environments with fixed time steps, our agent outputs **decoupled action-duration pairs**:
+Unlike standard RL environments with fixed time steps, the agent outputs **decoupled action-duration pairs**:
 
 - **Action** (discrete, 0–5): Temperature delta (−50°C, −10°C, 0°C, +10°C, +50°C, or Terminate)
 - **Duration** (continuous, 1–600 minutes): How long to hold the furnace state
@@ -124,14 +124,14 @@ All physics properties are loaded from JSON at runtime. No code changes needed t
 
 - **Model**: `unsloth/Llama-3.2-1B-Instruct` (4-bit quantized via Unsloth)
 - **Algorithm**: GRPO (Group Relative Policy Optimization) via HuggingFace TRL
-- **Hardware**: Single Tesla T4 (Google Colab free tier)
+- **Hardware**: Single Tesla T4 GPU (Hugging Face Space)
 - **LoRA**: r=16, targeting `q_proj` and `v_proj` (1.7M trainable params / 1.2B total = 0.14%)
 
 The LLM generates a complete thermal recipe as text (one `action, duration` pair per line), which is parsed via regex and executed against the live physics engine. The cumulative reward from the ODE simulation becomes the GRPO training signal.
 
 ### The Reward Function (V5)
 
-We use a hybrid reward: the server provides per-step physics rewards (proximity bonuses, energy penalties, clamped to ±500), and the client adds episode-level shaping:
+The system uses a hybrid reward: the server provides per-step physics rewards (proximity bonuses, energy penalties, clamped to ±500), and the client adds episode-level shaping:
 
 ```python
 # Server-side (per step): proximity to target, time/energy penalties
@@ -151,7 +151,7 @@ We use a hybrid reward: the server provides per-step physics rewards (proximity 
 
 ### Bug Discovery: Five Bugs That Prevented Training
 
-During training, we observed `physics/radius_nm` flatlined at 0.0 nm across all runs. A deep audit of the server-side physics and the OpenEnv framework revealed five critical bugs:
+During training, I observed `physics/radius_nm` flatlined at 0.0 nm across all runs. A deep audit of the server-side physics and the OpenEnv framework revealed five critical bugs:
 
 #### Bug 1: Frozen Kinetics (`materials.json`)
 
@@ -176,14 +176,14 @@ If the material melted at minute 5 of a 60-minute step, the ODE solver continued
 
 #### Bug 4: Stateless HTTP — The Root Cause (OpenEnv Architecture)
 
-**This was the single most impactful discovery.** OpenEnv's HTTP `/reset` and `/step` endpoints are **stateless by design** — each call creates a brand-new environment instance, operates on it once, then destroys it. Our reward function was using HTTP POST requests, so:
+**This was the single most impactful discovery.** OpenEnv's HTTP `/reset` and `/step` endpoints are **stateless by design** — each call creates a brand-new environment instance, operates on it once, then destroys it. My reward function was using HTTP POST requests, so:
 
 - Every `/step` call stepped on a **fresh 20°C environment**
 - Temperature never accumulated across steps
 - The agent could never heat past ~70°C in a single step
 - Precipitate growth was physically impossible
 
-We discovered this by reading the OpenEnv `http_server.py` source:
+I discovered this by reading the OpenEnv `http_server.py` source:
 
 ```python
 # reset_handler:
@@ -300,11 +300,11 @@ The V3 reward function included an efficiency bonus for completing episodes in f
 
 ---
 
-## 5. What We Learned
+## 5. What I Learned
 
 ### On Environment Design for LLM-RL
 
-1. **Verify your physics can reach the target.** We spent hours debugging reward functions when the actual bug was `A=500` making success mathematically impossible. Always run a "can a perfect oracle solve this?" sanity check before training.
+1. **Verify your physics can reach the target.** I spent hours debugging reward functions when the actual bug was `A=500` making success mathematically impossible. Always run a "can a perfect oracle solve this?" sanity check before training.
 
 2. **Understand your framework's session semantics.** OpenEnv's HTTP endpoints are stateless — each call creates and destroys an environment. Multi-step episodes require WebSocket sessions. This single architectural misunderstanding wasted days of training compute.
 
@@ -334,7 +334,7 @@ heat-treatment-scheduler/
 │   ├── app.py                              # FastAPI + OpenEnv server (max_concurrent_envs=8)
 │   └── heat_treatment_scheduler_environment.py  # Core ODE physics engine + task routing
 ├── notebooks/
-│   └── TRL.ipynb                           # GRPO training notebook (Colab) — includes V5 reward function
+│   └── TRL.ipynb                           # GRPO training notebook — includes V5 reward function
 ├── materials.json                          # 7 alloy configurations (calibrated Arrhenius constants)
 ├── hardware.json                           # 3 hardware geometries (thermal mass)
 ├── models.py                               # Pydantic data models + physics constants
@@ -366,7 +366,7 @@ heat-treatment-scheduler/
 All code is open source. To reproduce:
 
 1. **Deploy the physics server**: Push to a Hugging Face Space with Docker SDK
-2. **Run training**: Open `post_training/colab/TRL.ipynb` in Google Colab (T4 GPU)
+2. **Run training**: Open the [Training Notebook](https://huggingface.co/spaces/mukundnjoy/TRL-heat-treatment-scheduler) on Hugging Face (T4 GPU)
 3. **Install WebSocket dep**: `pip install websockets nest_asyncio`
 4. **Monitor**: Training logs stream to Weights & Biases
 
