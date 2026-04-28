@@ -55,9 +55,9 @@ The system is split into two services connected over **WebSocket** (OpenEnv's st
 ┌──────────────────────────────────────────┐                        ┌─────────────────────────────────────────┐
 │        ML Policy Optimizer (Client)      │  ── WSS /ws ─────────► │       Physics Engine (Server)           │
 │        HF Space (GPU Notebook)           │                        │       HF Space (Docker)                │
-│                                          │  ◄── JSON Obs + R ──── │                                        │
-│  • Llama-3.2-1B (4-bit, Unsloth)         │                        │  • FastAPI + Meta OpenEnv              │
-│  • GRPO via TRL                          │                        │  • SciPy ODE solver (solve_ivp)        │
+│                                          │  ◄───────────────────  │                                        │
+│  • Llama-3.2-1B (4-bit, Unsloth)         │   JSON Observation     │  • FastAPI + Meta OpenEnv              │
+│  • GRPO via TRL                          │   + Reward Signal      │  • SciPy ODE solver (solve_ivp)        │
 │  • Client-side reward shaping            │                        │  • 7 alloys × 3 hardware configs       │
 └──────────────────────────────────────────┘                        └─────────────────────────────────────────┘
 ```
@@ -89,13 +89,35 @@ The oxide layer acts as an insulator, reducing $h_{eff}$ over time. This creates
 | Ripening (Danger Zone) | 0.68–1.0 × T_melt | Ostwald Ripening — grains coarsen (with saturation cap) |
 | Melting | T ≥ T_melt | Episode terminates (−200 penalty) |
 
-The growth rate in the sweet spot follows:
+The Arrhenius rate constant $k(T)$ governs all precipitate kinetics:
 
-$$\frac{dr}{dt} = A \cdot \exp\left(-\frac{E}{R \cdot T_K}\right) \cdot \left(1 - \frac{r}{R_{max}}\right)$$
+$$k(T) = A \cdot \exp\left(-\frac{E}{R \cdot T_K}\right)$$
 
-The saturation term $(1 - r/R_{max})$ acts as an emergent "parking brake" — growth naturally slows as the radius approaches the physical ceiling, giving the agent a window for precision control.
+The growth rate $dr/dt$ then depends on the current thermal phase:
 
-In the Ostwald Ripening zone, growth follows $k(T) \cdot (r/R_{max}) \cdot (1 - r/R_{max})$, which self-saturates to prevent numerical blowup while maintaining the physically correct positive-feedback characteristic.
+1. **Frozen Phase** ($T < 0.35 \cdot T_{melt}$):
+
+   $$\frac{dr}{dt} = 0$$
+
+   Atoms lack the thermal energy to diffuse.
+
+2. **Controlled Growth Phase** ($0.35 \leq T \leq 0.68 \cdot T_{melt}$):
+
+   $$\frac{dr}{dt} = k(T) \cdot \left(1 - \frac{r}{R_{max}}\right)$$
+
+   The saturation term $(1 - r/R_{max})$ acts as an emergent **"parking brake"** — growth naturally slows as the radius approaches the physical ceiling, giving the agent a window for precision control.
+
+3. **Ostwald Ripening Phase** ($0.68 < T \leq T_{melt}$):
+
+   $$\frac{dr}{dt} = k(T) \cdot \frac{r}{R_{max}}$$
+
+   Growth rate is proportional to current radius — a positive-feedback loop where larger grains consume smaller ones. In the implementation, this is multiplied by a saturation guard $\max(0,\; 1 - r/R_{max})$ to prevent numerical blowup near the ceiling.
+
+4. **Melting Phase** ($T > T_{melt}$):
+
+   $$\frac{dr}{dt} = 0$$
+
+   The crystalline structure dissolves. The episode terminates with a −200 penalty.
 
 ### The Action Space (Semi-Markov Decision Process)
 
@@ -129,9 +151,11 @@ All physics properties are loaded from JSON at runtime. No code changes needed t
 
 The LLM generates a complete thermal recipe as text (one `action, duration` pair per line), which is parsed via regex and executed against the live physics engine. The cumulative reward from the ODE simulation becomes the GRPO training signal.
 
-### The Reward Function (V5)
+### The Reward Function (V6) and Composable Rubrics
 
-The system uses a hybrid reward: the server provides per-step physics rewards (proximity bonuses, energy penalties, clamped to ±500), and the client adds episode-level shaping:
+The system uses a hybrid reward architecture. On the server side, it cleanly implements OpenEnv's **Composable Rubrics (RFC 004)** framework (`openenv.core.rubrics`). Built in `server/rubrics.py`, the physics reward is decomposed into four modular, inspectable components combined via a `WeightedSum`: **Proximity** (0.40), **Safety** (0.25), **Terminal** (0.20), and **Efficiency** (0.15).
+
+These per-step physics rubric scores are clamped to ±500 to prevent numerical overflow, and the client script then adds final episode-level shaping:
 
 ```python
 # Server-side (per step): proximity to target, time/energy penalties
@@ -157,7 +181,7 @@ During training, I observed `physics/radius_nm` flatlined at 0.0 nm across all r
 
 The Arrhenius pre-exponential factor `A` was set too low for every alloy. For Ti-6Al-4V (`A=500`), the maximum growth rate at optimal temperature was **0.005 nm/hr** — requiring **4,644 hours** (193 days!) to reach the 22.5 nm target. The 50-hour TIME_MAX made success mathematically impossible.
 
-**Fix**: Calibrated `A` values for each alloy to produce ~3 nm/hr at optimal temperature. Ti-6Al-4V: 500 → 620,000. Al-2024: 1,000 → 1,000,000,000.
+**Fix**: Calibrated `A` values for each alloy to produce ~3 nm/hr at optimal temperature. Ti-6Al-4V: 500 → 62,000. Al-2024: 1,000 → 100,000,000.
 
 #### Bug 2: Shrinking Precipitate ODE
 
@@ -224,14 +248,14 @@ After fixing all bugs, training on `easy-bake` (Al-2024, lab scale) showed clear
 | Training Phase | Steps | What the Model Learned |
 |----------------|-------|----------------------|
 | **No physics** (V1-V4, HTTP) | 0-200+ | Nothing — stateless HTTP broke physics. Reward flatlined. |
-| **First contact** (V5, WebSocket) | 0-10 | Entered Growth phase (T > 176°C) for the first time ever. |
+| **First contact** (V5→V6, WebSocket) | 0-10 | Entered Growth phase (T > 176°C) for the first time ever. |
 | **Phase mastery** | 10-50 | `entered_growth` → 1.0 consistently. Learned to heat aggressively. |
 | **Exploration** | 50-330+ | Generating varied recipes (3-50 steps). Radius oscillating between 0 and 30 nm. |
-| **Convergence** | 330-7200 | Reward climbs from −50 to +400. Growth phase entry stabilizes at ~90%. Radius concentrates in 20–28 nm range. |
+| **Convergence** | 330-7200 | Reward climbs from −154 to +400. Growth phase entry stabilizes at ~90%. Radius concentrates in 20–28 nm range. |
 
 #### Reward Curve
 
-![GRPO reward climbing from −50 to +400 over 7200 training steps](docs/plots/reward_curve.png)
+![GRPO reward climbing from −154 to +400 over 7200 training steps](docs/plots/reward_curve.png)
 *Figure 1: GRPO reward over 7200 steps (run `lawuznjp`). The smoothed curve (EMA-30) shows a clear upward trend from negative rewards to +400. Scatter points show per-step variance — the agent actively explores the reward landscape, with occasional catastrophic episodes (−500) even late in training.*
 
 #### Precipitate Radius Evolution
@@ -247,16 +271,16 @@ After fixing all bugs, training on `easy-bake` (Al-2024, lab scale) showed clear
 #### Growth Phase Discovery
 
 ![Growth phase entry rate rising from 0% to 90%+](docs/plots/growth_phase_entry.png)
-*Figure 4: Growth phase entry rate (rolling-50 average). The agent learns to heat past the 176°C growth threshold, rising from 0% at initialization to consistently >85%. The baseline few-shot model achieves only ~25% (red dotted line).*
+*Figure 4: Growth phase entry rate (rolling-50 average). The agent learns to heat past the 176°C growth threshold, rising from 0% at initialization to consistently >85%. The baseline few-shot model achieves only 10.0% (red dotted line).*
 
 Key metrics at step 7200:
 
 - **`entered_growth`**: Consistently ~90% (model learned to heat past 176°C)
 - **`physics/core_temp_C`**: 300-400°C range (stabilized in the growth zone)
 - **`physics/radius_nm`**: Concentrated 20–28 nm range (still overshooting 10–15 nm target)
-- **Reward**: Mean reward climbed from −50 to +400, bounded ±500
+- **Reward**: Mean reward climbed from −154 to +400, bounded ±500
 
-The model has mastered Phase 1 (entering the growth phase) but hasn't yet solved the Predictive Braking challenge (parking the radius at exactly 12.5 nm). The growth rate at 300-400°C is extremely fast, giving the model a very narrow control window.
+The model has mastered Phase 1 (entering the growth phase) but hasn't yet solved the Predictive Braking challenge (parking the radius perfectly within the 10-15 nm target window). The growth rate at 300-400°C is extremely fast, giving the model a very narrow control window.
 
 ### Curriculum Learning Strategy
 
@@ -288,9 +312,9 @@ After the phase-gate fix, the agent heated to ~200°C (collecting temperature pr
 
 ### Hack #3: "Prompt Mismatch" (V3)
 
-The most subtle hack wasn't even intentional: the system prompt still referenced Ti-6Al-4V (growth at 600°C, target 22.5 nm) while the reward function targeted Al-2024 (growth at 176°C, target 12.5 nm). The model faithfully followed the prompt's instructions — trying to heat to 600°C — but the Al-2024 environment melted at 502°C.
+The most subtle hack wasn't even intentional: the system prompt still referenced Ti-6Al-4V (growth at 600°C, target 22.5 nm) while the reward function targeted Al-2024 (growth at 176°C, target 10-15 nm window). The model faithfully followed the prompt's instructions — trying to heat to 600°C — but the Al-2024 environment melted at 502°C.
 
-**Counter**: Aligned the system prompt with the curriculum task. Always change both together.
+**Counter**: I aligned the system prompt with the curriculum task, making sure to always update both together.
 
 ### Hack #4: "Quit Early" (V3 Efficiency Bonus)
 
@@ -304,23 +328,23 @@ The V3 reward function included an efficiency bonus for completing episodes in f
 
 ### On Environment Design for LLM-RL
 
-1. **Verify your physics can reach the target.** I spent hours debugging reward functions when the actual bug was `A=500` making success mathematically impossible. Always run a "can a perfect oracle solve this?" sanity check before training.
+1. **Verifying physics can reach the target.** I spent hours debugging reward functions when the actual bug was `A=500` making success mathematically impossible. I learned to always run a "can a perfect oracle solve this?" sanity check before attempting any training.
 
-2. **Understand your framework's session semantics.** OpenEnv's HTTP endpoints are stateless — each call creates and destroys an environment. Multi-step episodes require WebSocket sessions. This single architectural misunderstanding wasted days of training compute.
+2. **Understanding framework session semantics.** OpenEnv's HTTP endpoints are stateless — each call creates and destroys an environment. Because multi-step episodes require WebSocket sessions, this single architectural misunderstanding initially cost me days of training compute.
 
-3. **Reward shaping is an arms race.** Every reward bonus you add creates a new surface for the agent to exploit. The phase-gate bonus fixed one hack but enabled another. Design rewards that are *necessary* (can't be avoided) rather than *sufficient* (can be collected without progress).
+3. **Recognizing reward shaping as an arms race.** I found that every reward bonus added created a new surface for the agent to exploit. For instance, the phase-gate bonus fixed one hack but enabled another. I had to learn to design rewards that were *necessary* (couldn't be avoided) rather than merely *sufficient* (could be collected without real progress).
 
-4. **Prompt-reward alignment is critical.** In LLM-RL, the system prompt is part of the policy. If the prompt says "target 22.5 nm" but the reward optimizes for 12.5 nm, the model is getting contradictory gradients. Always update prompts and rewards atomically.
+4. **Maintaining prompt-reward alignment.** In LLM-RL, I realized the system prompt is effectively part of the policy. When my prompt said "target 22.5 nm" but the reward optimized for 10-15 nm window, the model received contradictory gradients. I had to ensure I updated prompts and rewards atomically.
 
-5. **Clamp everything.** Continuous physics can produce extreme values (10^154 nm radius, NaN rewards) that corrupt RL gradients instantly. Clamp inside the ODE, after the ODE, and at the reward boundary.
+5. **Clamping everything.** Because continuous physics can produce extreme values (like a 10^154 nm radius or NaN rewards) that corrupt RL gradients instantly, I learned to clamp variables everywhere: inside the ODE, after the ODE, and at the reward boundary.
 
 ### On Continuous Physics Environments
 
-1. **SMDP action spaces are underexplored.** Letting the agent choose *duration* alongside *action* dramatically changes the problem structure. A 1-minute micro-adjustment and a 10-hour hold are fundamentally different decisions, yet they're the same action with different duration parameters.
+1. **SMDP action spaces are underexplored.** I discovered that letting the agent choose *duration* alongside *action* dramatically changes the problem structure. A 1-minute micro-adjustment and a 10-hour hold are fundamentally different decisions, yet they are processed as the same action with different duration parameters.
 
-2. **Thermal lag creates natural curriculum.** The same physics engine produces trivially easy (lab scale, instant response) to extremely hard (massive casting, 1.7-hour lag) problems just by changing the hardware configuration. This is free curriculum learning built into the domain.
+2. **Thermal lag creates a natural curriculum.** I was able to use the same physics engine to produce trivially easy (lab scale, instant response) to extremely hard (massive casting, 1.7-hour lag) problems simply by changing the hardware configuration. This provided me with free curriculum learning built natively into the domain.
 
-3. **ODE solvers need event hooks and clamping.** Without terminal events, `solve_ivp` will happily integrate past physically meaningful boundaries (melting, time limits). Without state clamping inside the derivative function, positive-feedback terms can cause numerical blowup. Always use the `events` parameter and clamp state variables.
+3. **ODE solvers need event hooks and clamping.** I found that without terminal events, `solve_ivp` would happily integrate past physically meaningful boundaries (like melting or time limits). Without state clamping inside the derivative function, positive-feedback terms caused numerical blowup. Using the `events` parameter and clamping state variables became mandatory for my simulations.
 
 ---
 
@@ -332,9 +356,11 @@ The V3 reward function included an efficiency bonus for completing episodes in f
 heat-treatment-scheduler/
 ├── server/
 │   ├── app.py                              # FastAPI + OpenEnv server (max_concurrent_envs=8)
-│   └── heat_treatment_scheduler_environment.py  # Core ODE physics engine + task routing
+│   ├── heat_treatment_scheduler_environment.py  # Core ODE physics engine + task routing
+│   ├── rubrics.py                          # Composable Reward Rubrics (OpenEnv RFC 004)
+│   └── requirements.txt                    # Server-side dependencies
 ├── notebooks/
-│   └── TRL.ipynb                           # GRPO training notebook — includes V5 reward function
+│   └── TRL.ipynb                           # GRPO training notebook — includes V6 reward function
 ├── materials.json                          # 7 alloy configurations (calibrated Arrhenius constants)
 ├── hardware.json                           # 3 hardware geometries (thermal mass)
 ├── models.py                               # Pydantic data models + physics constants

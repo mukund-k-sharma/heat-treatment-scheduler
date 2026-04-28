@@ -50,11 +50,11 @@ The furnace air temperature changes instantly, but the material's core temperatu
 ┌──────────────────────────────────────────┐                        ┌─────────────────────────────────────────┐
 │        ML Policy Optimizer (Client)      │  ── WSS /ws ─────────► │       Physics Engine (Server)           │
 │        HF Space (GPU Notebook)           │                        │       Hugging Face Space (Docker)       │
-│                                          │  ◄── JSON Obs + R ──── │                                        │
-│  • Llama-3.2-1B (4-bit, Unsloth)         │                        │  • FastAPI + Meta OpenEnv              │
-│  • GRPO via TRL                          │                        │  • SciPy ODE solver (solve_ivp)        │
+│                                          │  ◄───────────────────  │                                        │
+│  • Llama-3.2-1B (4-bit, Unsloth)         │   JSON Observation     │  • FastAPI + Meta OpenEnv              │
+│  • GRPO via TRL                          │   + Reward Signal      │  • SciPy ODE solver (solve_ivp)        │
 │  • Client-side reward shaping            │                        │  • 7 alloys × 3 hardware configs       │
-│  • WebSocket reward function (V5)        │                        │  • Task routing (easy/medium/hard)     │
+│  • WebSocket reward function (V6)        │                        │  • Task routing (easy/medium/hard)     │
 └──────────────────────────────────────────┘                        └─────────────────────────────────────────┘
 ```
 
@@ -100,31 +100,31 @@ This evaluates three tasks — `easy-bake` (Al-2024, lab scale), `medium-bake` (
 ## Training Results
 
 ![GRPO Training Dashboard showing reward, radius, temperature, and growth phase metrics across 7200 training steps](docs/plots/training_dashboard.png)
-*GRPO Training Dashboard (7200 steps on `easy-bake`, Al-2024). Top-left: reward climbs from −50 to +400. Top-right: radius transitions from bimodal (0 or 30 nm) to concentrated 20–28 nm range. Bottom-left: peak temperature stabilizes in the growth zone (200–400°C). Bottom-right: growth phase entry rate rises from 0% to ~90%.*
+*GRPO Training Dashboard (7200 steps on `easy-bake`, Al-2024). Top-left: reward climbs from −154 to +400. Top-right: radius transitions from bimodal (0 or 30 nm) to concentrated 20–28 nm range. Bottom-left: peak temperature stabilizes in the growth zone (200–400°C). Bottom-right: growth phase entry rate rises from 0% to ~90%.*
 
 Training on `easy-bake` (Al-2024, lab scale) with GRPO showed progressive learning after resolving critical physics and architectural bugs:
 
 | Training Phase | Steps | Observation |
 |----------------|-------|-------------|
 | **V1-V4 (HTTP, stateless)** | 0-200+ | Zero learning. Stateless HTTP meant no state persistence — radius flatlined at 0.0 nm. |
-| **V5 (WebSocket, stateful)** | 0-10 | First successful growth phase entry. Temperature reached 277°C, radius grew to 2.82 nm. |
+| **V5→V6 (WebSocket, stateful)** | 0-10 | First successful growth phase entry. Temperature reached 277°C, radius grew to 2.82 nm. |
 | **Phase mastery** | 10-50 | `entered_growth` → 1.0 consistently. Model learned to heat past 176°C threshold. |
 | **Exploration** | 50-330+ | Varied recipes (3-50 steps). Radius oscillating 0-30 nm. Active temperature exploration (100-500°C). |
 
 ### Reward Curve
 
-![Reward climbing from −50 to +400 over 7200 training steps, with individual per-step rewards shown as scatter points](docs/plots/reward_curve.png)
+![Reward climbing from −154 to +400 over 7200 training steps, with individual per-step rewards shown as scatter points](docs/plots/reward_curve.png)
 *GRPO reward over 7200 steps. The smoothed curve (EMA-30) shows clear upward trend from negative rewards to +400, indicating the agent progressively learns to control the furnace.*
 
 ### Growth Phase Discovery
 
-![Growth phase entry rate rising from 0% to 90%+ over training, with baseline rate of 25% marked](docs/plots/growth_phase_entry.png)
-*Growth phase entry rate (rolling-50 average). The agent learns to heat past the 176°C growth threshold, rising from 0% at initialization to consistently >85%. The baseline few-shot model achieves only ~25% (red dotted line).*
+![Growth phase entry rate rising from 0% to 90%+ over training, with baseline rate of 10% marked](docs/plots/growth_phase_entry.png)
+*Growth phase entry rate (rolling-50 average). The agent learns to heat past the 176°C growth threshold, rising from 0% at initialization to consistently >85%. The baseline few-shot model achieves only 10.0% (red dotted line).*
 
 Key findings at 7200 steps:
 
 - **Growth phase mastery**: The model consistently heats past 176°C (Al-2024 growth threshold), entry rate rising from 0% to ~90%
-- **Reward convergence**: Mean reward climbs from −50 to +400 over 7200 steps
+- **Reward convergence**: Mean reward climbs from −154 to +400 over 7200 steps
 - **Predictive Braking**: Still in exploration — the model hasn't yet learned to park the radius at exactly 12.5 nm (overshoots to 20–28 nm range)
 - **Reward stability**: All rewards bounded ±500 after ODE blowup fix
 

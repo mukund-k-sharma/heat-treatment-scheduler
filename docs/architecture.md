@@ -13,7 +13,7 @@ This project splits the Reinforcement Learning pipeline into two distinct micros
 │                                          │  ◄───────────────────  │                                        │
 │  • Llama-3.2-1B (4-bit, Unsloth)         │   JSON Observation     │  • FastAPI + OpenEnv                   │
 │  • GRPO via TRL                          │   + Reward Signal       │  • SciPy ODE solver (solve_ivp)        │
-│  • WebSocket reward function (V5)        │                        │  • Task routing (easy/medium/hard)     │
+│  • WebSocket reward function (V6)        │                        │  • Task routing (easy/medium/hard)     │
 └──────────────────────────────────────────┘                        └─────────────────────────────────────────┘
 ```
 
@@ -46,6 +46,17 @@ Hosted on a **Hugging Face Space** (Docker SDK), this acts as the digital twin.
 | `GET` | `/state` | Return raw (unnormalized) environment state for UI/debugging |
 | `GET` | `/schema` | Return JSON schemas for Action and Observation types |
 | **`WS`** | **`/ws`** | **WebSocket endpoint for stateful sessions (used for training)** |
+
+### Composable Rubrics (OpenEnv RFC 004)
+
+The server computes its reward signal using OpenEnv's **Composable Rubric framework** (`openenv.core.rubrics.Rubric`). Implemented in `server/rubrics.py`, the `HeatTreatmentRubric` uses a `WeightedSum` to decompose the monolithic reward into four independent, inspectable axes:
+
+1. **`ProximityRubric` (0.40 weight)**: Accuracy of the precipitate radius vs the target window.
+2. **`SafetyRubric` (0.25 weight)**: Penalizes entering dangerous temperature zones (melting, excessive ripening).
+3. **`TerminalRubric` (0.20 weight)**: Evaluates final state success/failure outcomes.
+4. **`EfficiencyRubric` (0.15 weight)**: Penalizes excessive time or thermal energy usage.
+
+This design enables fine-grained introspection of the reward signal during training (e.g., logging `env.rubric.proximity.last_score`) and adheres to OpenEnv's clean engineering principles.
 
 ### Observation Space (7 values, all normalized)
 
@@ -118,13 +129,13 @@ Defines physical constants (Arrhenius parameters, melting points, oxidation rate
 
 | Key | Alloy | $A$ | $E$ (kJ/mol) | $C_p$ (J/kg·K) | $T_{melt}$ (°C) | Target Radius (nm) |
 |-----|-------|-----|---------------|-----------------|-----------------|--------------------|
-| `Al_96_Cu_4` | Aluminum 2024 | 1.0e9 | 120 | 875 | 502 | 10–15 |
-| `Al_98_Cu_2` | Aluminum (Al-2wt%Cu) | 9.65e8 | 125 | 890 | 548 | 12–18 |
-| `Ti_6Al_4V` | Titanium Grade 5 | 6.2e5 | 180 | 526 | 1600 | 20–25 |
-| `Mg_AZ31B` | Magnesium AZ31B | 3.93e8 | 130 | 1040 | 630 | 15–20 |
-| `Fe_99_C_1` | High-Carbon Steel 1095 | 1.27e5 | 150 | 475 | 1400 | 5–8 |
-| `inconel_718` | Inconel 718 (Ni-Cr-Fe) | 2.26e11 | 260 | 435 | 1336 | 15–20 |
-| `cantor_equiatomic` | Cantor Alloy (CoCrFeMnNi) | 4.44e8 | 210 | 450 | 1334 | 8–12 |
+| `Al_96_Cu_4` | Aluminum 2024 | 1.0e8 | 120 | 875 | 502 | 10–15 |
+| `Al_98_Cu_2` | Aluminum (Al-2wt%Cu) | 9.65e7 | 125 | 890 | 548 | 12–18 |
+| `Ti_6Al_4V` | Titanium Grade 5 | 6.2e4 | 180 | 526 | 1600 | 20–25 |
+| `Mg_AZ31B` | Magnesium AZ31B | 3.93e7 | 130 | 1040 | 630 | 15–20 |
+| `Fe_99_C_1` | High-Carbon Steel 1095 | 1.27e4 | 150 | 475 | 1400 | 5–8 |
+| `inconel_718` | Inconel 718 (Ni-Cr-Fe) | 2.26e10 | 260 | 435 | 1336 | 15–20 |
+| `cantor_equiatomic` | Cantor Alloy (CoCrFeMnNi) | 4.44e7 | 210 | 450 | 1334 | 8–12 |
 
 ### `hardware.json` — Extrinsic Properties
 
@@ -172,10 +183,12 @@ heat-treatment-scheduler/
 ├── server/
 │   ├── __init__.py                 # Server package init
 │   ├── app.py                      # FastAPI/OpenEnv app factory (max_concurrent_envs=8)
-│   └── heat_treatment_scheduler_environment.py  # Core physics engine (ODE solver + task routing)
+│   ├── heat_treatment_scheduler_environment.py  # Core physics engine (ODE solver + task routing)
+│   ├── rubrics.py                  # Composable Reward Rubrics (OpenEnv RFC 004)
+│   └── requirements.txt            # Server-side dependencies for deployment
 │
 ├── notebooks/
-│   └── TRL.ipynb                   # GRPO training notebook — includes V5 reward function
+│   └── TRL.ipynb                   # GRPO training notebook — includes V6 reward function
 │
 ├── materials.json                  # Intrinsic alloy properties (7 alloys, calibrated A values)
 ├── hardware.json                   # Extrinsic hardware geometries (3 setups)
@@ -186,8 +199,7 @@ heat-treatment-scheduler/
 │
 ├── docs/
 │   ├── architecture.md             # This file
-│   ├── physics.md                  # Physics engine deep-dive
-│   └── FINALE_PROBLEM.md           # Hackathon problem statement
+│   └── physics.md                  # Physics engine deep-dive
 │
 ├── BLOG.md                         # Technical writeup / blog post
 └── README.md                       # Project overview
