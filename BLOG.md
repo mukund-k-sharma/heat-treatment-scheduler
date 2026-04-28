@@ -36,7 +36,7 @@ This creates a lethal trap: if the agent heats aggressively to grow precipitates
 Just like a freight train can't stop on a dime, a massive casting can't cool instantly. The agent must learn to begin cooling **hours before** the precipitates reach target size, anticipating exactly how much residual growth will occur during the cool-down phase. I call this **Predictive Braking** — the core capability I want the LLM to internalize.
 
 ![Predictive Braking in Action](docs/plots/wandb_predictive_breaking.png)
-*Figure: A real W&B trace from training. Notice how the agent shuts off the furnace (blue line) while the material temperature (red line) is still rising, precisely calculating that residual heat will carry the precipitate growth (green line) into the target zone without overshooting.*
+*Figure: A real W&B trace from training ([Run f1xofkz9](https://wandb.ai/mukundnjoy-paypal/heat-treatment-grpo/runs/f1xofkz9?nw=nwusermukundnjoy)). Notice how the agent shuts off the furnace (blue line) while the material temperature (red line) is still rising, precisely calculating that residual heat will carry the precipitate growth (green line) into the target zone without overshooting.*
 
 ### Why This Is Hard for RL
 
