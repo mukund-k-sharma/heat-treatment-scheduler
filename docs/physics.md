@@ -85,8 +85,8 @@ Where $R_{max}$ = `alloy.r_max_clip` — the physical ceiling radius for the all
 
 In the **Controlled Growth** phase, the saturation factor $(1 - r/R_{max})$ creates an emergent deceleration:
 
-- When $r \ll R_{max}$: growth is fast ($dr/dt \approx k(T)$)
-- When $r \to R_{max}$: growth slows to near-zero ($dr/dt \to 0$)
+- When $r \ll R_{max}$: growth is fast $(dr/dt \approx k(T))$
+- When $r \to R_{max}$: growth slows to near-zero $(dr/dt \to 0)$
 
 ---
 
@@ -108,7 +108,7 @@ $$R_{step} -= (T_{mat} - T_{warning}) 0.05 \frac{\Delta t}{3600}$$
 
 | Condition | Reward |
 |-----------|--------|
-| **Success** ($r_{min} \leq r \leq r_{max}$) | $+100 + 100 \exp\left(-\frac{(r - r_{target})^2}{10}\right)$ |
+| **Success** $(r_{min} \leq r \leq r_{max})$ | $+100 + 100 \exp\left(-\frac{(r - r_{target})^2}{10}\right)$ |
 | **Over-coarsened** ($r > r_{max}$) | $-100$ |
 | **Melted** ($T \geq T_{melt}$) | $-200$ |
 | **Timed out / Other** | $-50$ |
