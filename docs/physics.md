@@ -2,9 +2,9 @@
 
 The Heat Treatment Digital Twin simulates precipitation hardening using three coupled Ordinary Differential Equations (ODEs), solved continuously by SciPy's `solve_ivp` (RK45, max step = 120 s). The state vector at every integration step is:
 
-$$\mathbf{y} = [T_{\text{mat}},\; r,\; ox]$$
+$$\mathbf{y} = [T_{mat},\; r,\; ox]$$
 
-where $T_{\text{mat}}$ is the material core temperature (°C), $r$ is the precipitate radius (nm), and $ox$ is the oxidation insulation factor (dimensionless, 0-0.8).
+where $T_{mat}$ is the material core temperature (°C), $r$ is the precipitate radius (nm), and $ox$ is the oxidation insulation factor (dimensionless, 0-0.8).
 
 ---
 
@@ -12,7 +12,7 @@ where $T_{\text{mat}}$ is the material core temperature (°C), $r$ is the precip
 
 The furnace air temperature ($T_{furnace}$) changes **instantaneously** when the agent selects a temperature action, plus Gaussian noise $\mathcal{N}(0, \sigma_T)$. But the material's core temperature follows Newton's Law of Cooling:
 
-$$\frac{dT_{\text{mat}}}{dt} = \frac{h_{eff}(t) A_{surface}}{m C_p} (T_{furnace} - T_{\text{mat}})$$
+$$\frac{dT_{mat}}{dt} = \frac{h_{eff}(t) A_{surface}}{m C_p} (T_{furnace} - T_{mat})$$
 
 | Symbol | Meaning | Source |
 |--------|---------|--------|
@@ -45,7 +45,7 @@ The massive casting requires ~15,000× longer to equilibrate. This is why the `h
 
 As the material heats, a surface oxide layer builds up, reducing the effective heat transfer coefficient and acting as a thermal insulator. Oxidation follows Arrhenius kinetics:
 
-$$\frac{d(ox)}{dt} = A_{ox} \exp\left(-\frac{E_{ox}}{R (T_{\text{mat}} + 273.15)}\right) (0.8 - ox)$$
+$$\frac{d(ox)}{dt} = A_{ox} \exp\left(-\frac{E_{ox}}{R (T_{mat} + 273.15)}\right) (0.8 - ox)$$
 
 | Symbol | Meaning | Source |
 |--------|---------|--------|
@@ -77,7 +77,7 @@ Different alloys oxidize at vastly different rates:
 
 The base reaction rate $k(T)$ for precipitate growth is driven by the Arrhenius equation:
 
-$$k(T) = A \exp\left(-\frac{E}{R (T_{\text{mat}} + 273.15)}\right)$$
+$$k(T) = A \exp\left(-\frac{E}{R (T_{mat} + 273.15)}\right)$$
 
 | Symbol | Meaning | Source |
 |--------|---------|--------|
@@ -86,31 +86,31 @@ $$k(T) = A \exp\left(-\frac{E}{R (T_{\text{mat}} + 273.15)}\right)$$
 
 ### Phase-Dependent Growth Rate
 
-The actual growth rate $dr/dt$ depends on the current thermal regime, defined relative to the alloy's melting temperature ($T_{\text{melt}}$):
+The actual growth rate $dr/dt$ depends on the current thermal regime, defined relative to the alloy's melting temperature ($T_{melt}$):
 
 | Phase | Temperature Range | Growth Rate ($dr/dt$) | Physics |
 |-------|-------------------|----------------------|---------|
-| **Frozen** | $T < 0.35T_{\text{melt}}$ | $0$ | Atomic diffusion is negligible. |
-| **Controlled Growth** | $0.35T_{\text{melt}} \leq T \leq 0.68T_{\text{melt}}$ | $k(T)(1 - r/R_{\text{max}})$ | Diffusion-controlled growth. |
-| **Ostwald Ripening** | $0.68T_{\text{melt}} < T \leq T_{\text{melt}}$ | $k(T)(r/R_{\text{max}})(1 - r/R_{\text{max}})$ | Grain coarsening. Failure mode. |
-| **Melting** | $T > T_{\text{melt}}$ | $0$ | Crystalline structure dissolves. |
+| **Frozen** | $T < 0.35T_{melt}$ | $0$ | Atomic diffusion is negligible. |
+| **Controlled Growth** | $0.35T_{melt} \leq T \leq 0.68T_{melt}$ | $k(T)(1 - r/R_{max})$ | Diffusion-controlled growth. |
+| **Ostwald Ripening** | $0.68T_{melt} < T \leq T_{melt}$ | $k(T)(r/R_{max})(1 - r/R_{max})$ | Grain coarsening. Failure mode. |
+| **Melting** | $T > T_{melt}$ | $0$ | Crystalline structure dissolves. |
 
-Where $R_{\text{max}}$ = `alloy.r_max_clip` — the physical ceiling radius for the alloy.
+Where $R_{max}$ = `alloy.r_max_clip` — the physical ceiling radius for the alloy.
 
-> **ODE Stability**: All state variables are clamped inside the derivative function ($r \in [0, R_{\text{max}}]$, $ox \in [0, 0.8]$) and after ODE integration. This prevents numerical blowup from the positive-feedback ripening term. Additionally, if $r \geq R_{\text{max}}$, growth is forced to zero.
+> **ODE Stability**: All state variables are clamped inside the derivative function ($r \in [0, R_{max}]$, $ox \in [0, 0.8]$) and after ODE integration. This prevents numerical blowup from the positive-feedback ripening term. Additionally, if $r \geq R_{max}$, growth is forced to zero.
 
 ### The Natural "Parking Brake"
 
-In the **Controlled Growth** phase, the saturation factor $(1 - r/R_{\text{max}})$ creates an emergent deceleration:
+In the **Controlled Growth** phase, the saturation factor $(1 - r/R_{max})$ creates an emergent deceleration:
 
-- When $r \ll R_{\text{max}}$: growth is fast ($dr/dt \approx k(T)$)
-- When $r \to R_{\text{max}}$: growth slows to near-zero ($dr/dt \to 0$)
+- When $r \ll R_{max}$: growth is fast ($dr/dt \approx k(T)$)
+- When $r \to R_{max}$: growth slows to near-zero ($dr/dt \to 0$)
 
-This allows the agent to "park" the precipitate radius at the target by holding the material in the Growth phase. In the Ripening phase, the additional $(1 - r/R_{\text{max}})$ saturation term prevents numerical blowup while maintaining the physically correct positive-feedback characteristic of Ostwald ripening.
+This allows the agent to "park" the precipitate radius at the target by holding the material in the Growth phase. In the Ripening phase, the additional $(1 - r/R_{max})$ saturation term prevents numerical blowup while maintaining the physically correct positive-feedback characteristic of Ostwald ripening.
 
 ### Phase Thresholds by Alloy
 
-| Alloy | $T_{\text{melt}}$ | Frozen ($< 0.35T_m$) | Growth ($0.35-0.68T_m$) | Ripening ($0.68-1.0T_m$) |
+| Alloy | $T_{melt}$ | Frozen ($< 0.35T_m$) | Growth ($0.35-0.68T_m$) | Ripening ($0.68-1.0T_m$) |
 |-------|------------|----------------------|-------------------------|--------------------------|
 | Al-2024 | 502 °C | < 176 °C | 176-341 °C | 341-502 °C |
 | Steel 1095 | 1400 °C | < 490 °C | 490-952 °C | 952-1400 °C |
@@ -127,11 +127,11 @@ The reward function shapes the agent's policy toward precision, efficiency, and 
 
 At every step with duration $\Delta t$ seconds:
 
-$$R_{step} = -0.1 |r - r_{target}| - 0.01 (r - r_{target})^2 - 0.001 T_{\text{mat}} \frac{\Delta t}{3600} - 0.00028 \Delta t$$
+$$R_{step} = -0.1 |r - r_{target}| - 0.01 (r - r_{target})^2 - 0.001 T_{mat} \frac{\Delta t}{3600} - 0.00028 \Delta t$$
 
-Additionally, if $T_{\text{mat}}$ exceeds $T_{\text{melt}} - 100$°C:
+Additionally, if $T_{mat}$ exceeds $T_{melt} - 100$°C:
 
-$$R_{step} -= (T_{\text{mat}} - T_{warning}) 0.05 \frac{\Delta t}{3600}$$
+$$R_{step} -= (T_{mat} - T_{warning}) 0.05 \frac{\Delta t}{3600}$$
 
 ### Terminal Rewards
 
@@ -139,27 +139,27 @@ $$R_{step} -= (T_{\text{mat}} - T_{warning}) 0.05 \frac{\Delta t}{3600}$$
 |-----------|--------|
 | **Success** ($r_{min} \leq r \leq r_{max}$) | $+100 + 100 \exp\left(-\frac{(r - r_{target})^2}{10}\right)$ |
 | **Over-coarsened** ($r > r_{max}$) | $-100$ |
-| **Melted** ($T \geq T_{\text{melt}}$) | $-200$ |
+| **Melted** ($T \geq T_{melt}$) | $-200$ |
 | **Timed out / Other** | $-50$ |
 
 ### Warning Temperature Thresholds
 
-The per-step penalty intensifies when $T_{\text{mat}}$ exceeds $T_{\text{melt}} - 100$°C. Computed per alloy:
+The per-step penalty intensifies when $T_{mat}$ exceeds $T_{melt} - 100$°C. Computed per alloy:
 
-| Alloy | $T_{\text{melt}}$ (°C) | $T_{warning}$ (°C) | Penalty kicks in at |
+| Alloy | $T_{melt}$ (°C) | $T_{warning}$ (°C) | Penalty kicks in at |
 |-------|-----------------|---------------------|---------------------|
-| Al-2024 | 502 | 402 | 80% of $T_{\text{melt}}$ |
-| Mg AZ31B | 630 | 530 | 84% of $T_{\text{melt}}$ |
-| Inconel 718 | 1336 | 1236 | 93% of $T_{\text{melt}}$ |
-| Cantor Alloy | 1334 | 1234 | 93% of $T_{\text{melt}}$ |
-| Steel 1095 | 1400 | 1300 | 93% of $T_{\text{melt}}$ |
-| Ti-6Al-4V | 1600 | 1500 | 94% of $T_{\text{melt}}$ |
+| Al-2024 | 502 | 402 | 80% of $T_{melt}$ |
+| Mg AZ31B | 630 | 530 | 84% of $T_{melt}$ |
+| Inconel 718 | 1336 | 1236 | 93% of $T_{melt}$ |
+| Cantor Alloy | 1334 | 1234 | 93% of $T_{melt}$ |
+| Steel 1095 | 1400 | 1300 | 93% of $T_{melt}$ |
+| Ti-6Al-4V | 1600 | 1500 | 94% of $T_{melt}$ |
 
 ### Episode Termination Conditions
 
 An episode ends (`done=True`) when **any** of these conditions are met:
 
-1. **Melting**: $T_{\text{mat}} \geq T_{\text{melt}}$ — catastrophic material failure (reward: $-200$)
+1. **Melting**: $T_{mat} \geq T_{melt}$ — catastrophic material failure (reward: $-200$)
 2. **Over-coarsening**: $r > r_{max\_clip}$ — precipitate radius exceeds absolute maximum (reward: $-100$)
 3. **Timeout**: $t \geq 180{,}000\text{ s}$ (50 hours) — maximum allowed furnace time exceeded (reward: $-50$)
 4. **Agent termination**: `action_num = 5` — the agent voluntarily ends the episode (reward depends on final radius)
