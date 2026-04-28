@@ -11,7 +11,7 @@ We built a **continuous physics digital twin** of an industrial precipitation ha
 
 The environment is powered by three coupled Ordinary Differential Equations (ODEs) solved in real-time via SciPy, not a lookup table or a game engine. The LLM doesn't see pixels or tokens — it reads normalized telemetry and outputs `[action, duration]` pairs that are integrated through continuous physics.
 
-**Links:** [HF Space](https://huggingface.co/spaces/mukundnjoy/heat-treatment-scheduler) · [Training Notebook](https://colab.research.google.com/drive/1mdsMleIwfpBrLe2Csb2GTmKqZXQbGjC3?usp=sharing) · [Presentation Deck](https://docs.google.com/presentation/d/1ZHcN1Glm7zaK1rs2FiZDN-AXNNFXhR61vBk14T-eZh8/edit?usp=sharing)
+**Links:** [HF Space](https://huggingface.co/spaces/mukundnjoy/heat-treatment-scheduler) · [Training Notebook](https://colab.research.google.com/drive/1mdsMleIwfpBrLe2Csb2GTmKqZXQbGjC3?usp=sharing) · [Presentation Deck](https://docs.google.com/presentation/d/1ZHcN1Glm7zaK1rs2FiZDN-AXNNFXhR61vBk14T-eZh8/edit?usp=sharing) · [WandB Dashboard](https://wandb.ai/mukundnjoy-paypal/heat-treatment-grpo?nw=nwusermukundnjoy)
 
 ---
 
@@ -227,13 +227,34 @@ After fixing all bugs, training on `easy-bake` (Al-2024, lab scale) showed clear
 | **First contact** (V5, WebSocket) | 0-10 | Entered Growth phase (T > 176°C) for the first time ever. |
 | **Phase mastery** | 10-50 | `entered_growth` → 1.0 consistently. Learned to heat aggressively. |
 | **Exploration** | 50-330+ | Generating varied recipes (3-50 steps). Radius oscillating between 0 and 30 nm. |
+| **Convergence** | 330-7200 | Reward climbs from −50 to +400. Growth phase entry stabilizes at ~90%. Radius concentrates in 20–28 nm range. |
 
-Key metrics at step 330:
+#### Reward Curve
 
-- **`entered_growth`**: Consistently ~1.0 (model learned to heat past 176°C)
-- **`physics/core_temp_C`**: 100-500°C range (actively exploring temperature space)
-- **`physics/radius_nm`**: Bimodal — either ~0 nm (too cold) or ~30 nm (overshoot)
-- **Reward**: Bounded ±500, high variance (good for GRPO exploration)
+![GRPO reward climbing from −50 to +400 over 7200 training steps](docs/plots/reward_curve.png)
+*Figure 1: GRPO reward over 7200 steps (run `lawuznjp`). The smoothed curve (EMA-30) shows a clear upward trend from negative rewards to +400. Scatter points show per-step variance — the agent actively explores the reward landscape, with occasional catastrophic episodes (−500) even late in training.*
+
+#### Precipitate Radius Evolution
+
+![Precipitate radius evolution from bimodal 0/30nm to concentrated 20-28nm range](docs/plots/radius_evolution.png)
+*Figure 2: Precipitate radius evolution. Early training shows a bimodal distribution (0 nm or 30 nm ceiling). By step ~2000, the smoothed radius stabilizes in the 20–28 nm range — the agent has learned to consistently drive growth, though it still overshoots the 10–15 nm target window (green band).*
+
+#### Temperature Control
+
+![Peak temperature stabilizing in the 200-400°C growth zone](docs/plots/temperature_control.png)
+*Figure 3: Peak material temperature over training. The agent progresses from room temperature (20°C, failing to heat) to consistently reaching 300–400°C (the growth zone). The green line marks the growth threshold (176°C), orange marks Ostwald Ripening onset (341°C), and red marks the melting point (502°C).*
+
+#### Growth Phase Discovery
+
+![Growth phase entry rate rising from 0% to 90%+](docs/plots/growth_phase_entry.png)
+*Figure 4: Growth phase entry rate (rolling-50 average). The agent learns to heat past the 176°C growth threshold, rising from 0% at initialization to consistently >85%. The baseline few-shot model achieves only ~25% (red dotted line).*
+
+Key metrics at step 7200:
+
+- **`entered_growth`**: Consistently ~90% (model learned to heat past 176°C)
+- **`physics/core_temp_C`**: 300-400°C range (stabilized in the growth zone)
+- **`physics/radius_nm`**: Concentrated 20–28 nm range (still overshooting 10–15 nm target)
+- **Reward**: Mean reward climbed from −50 to +400, bounded ±500
 
 The model has mastered Phase 1 (entering the growth phase) but hasn't yet solved the Predictive Braking challenge (parking the radius at exactly 12.5 nm). The growth rate at 300-400°C is extremely fast, giving the model a very narrow control window.
 
