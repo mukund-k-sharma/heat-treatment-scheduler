@@ -26,7 +26,7 @@ $$\frac{dT_{mat}}{dt} = \frac{h_{eff}(t) A_{surface}}{m C_p} (T_{furnace} - T_{m
 This ODE creates **thermal inertia** (lag). A massive casting ($50\text{cm} \times 200\text{cm}$) has orders-of-magnitude more thermal mass than a lab sample ($1\text{cm} \times 5\text{cm}$), so its core temperature takes far longer to equilibrate. The agent must learn **"Predictive Braking"** — cutting the furnace heat long before the material reaches the target temperature — to prevent residual heat from causing catastrophic damage.
 
 ![Predictive Braking Visualization](plots/wandb_predictive_breaking.png)
-*Figure 1: W&B trace ([Run f1xofkz9](https://wandb.ai/mukundnjoy-paypal/heat-treatment-grpo/runs/f1xofkz9?nw=nwusermukundnjoy)) showing the agent cutting the furnace temperature (blue line) long before the target radius (green line) is reached, allowing the material temperature (red line) to drift safely into the target zone.*
+*Figure 1: W&B trace ([Run f1xofkz9](https://wandb.ai/mukundnjoy-paypal/heat-treatment-grpo/runs/f1xofkz9?nw=nwusermukundnjoy)) showing the agent cutting the furnace temperature (blue line) long before the target radius is reached, allowing the material temperature to drift safely into the target zone.*
 
 ### Worked Example: Thermal Mass Comparison
 

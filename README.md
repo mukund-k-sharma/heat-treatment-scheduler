@@ -37,7 +37,7 @@ Standard RL struggles with this because the physical environment is continuous a
 The furnace air temperature changes instantly, but the material's core temperature follows Newton's Law of Cooling — creating massive thermal inertia. A 50 cm × 200 cm titanium casting can take hours to equilibrate. The agent must learn to cut the furnace heat **long before** the material reaches the target temperature, to prevent residual heat from triggering catastrophic Ostwald Ripening (grain coarsening).
 
 ![Predictive Braking Visualization](docs/plots/wandb_predictive_breaking.png)
-*Figure 1: W&B trace ([Run f1xofkz9](https://wandb.ai/mukundnjoy-paypal/heat-treatment-grpo/runs/f1xofkz9?nw=nwusermukundnjoy)) showing the agent's learned behavior—preemptively shutting off the furnace to let residual heat drift the material perfectly into the target growth zone.*
+*Figure 1: W&B trace ([Run f1xofkz9](https://wandb.ai/mukundnjoy-paypal/heat-treatment-grpo/runs/f1xofkz9?nw=nwusermukundnjoy)) showing the agent's learned behavior—preemptively shutting off the furnace (blue line) to let residual heat drift the material perfectly into the target growth zone.*
 
 ### Key Innovations
 
