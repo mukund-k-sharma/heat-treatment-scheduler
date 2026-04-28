@@ -91,7 +91,7 @@ docker run -p 8000:8000 heat_treatment_scheduler_env:latest
 ```bash
 export API_BASE_URL="https://router.huggingface.co/v1"
 export API_KEY="your_hf_token"
-export MODEL_NAME="Qwen/Qwen2.5-72B-Instruct"
+export MODEL_NAME="unsloth/Llama-3.2-1B-Instruct"
 python inference.py
 ```
 
