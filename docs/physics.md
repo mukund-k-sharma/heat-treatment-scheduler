@@ -4,7 +4,7 @@ The Heat Treatment Digital Twin simulates precipitation hardening using three co
 
 $$\mathbf{y} = [T_{material},\; r,\; ox]$$
 
-where $T_{material}$ is the material core temperature (°C), $r$ is the precipitate radius (nm), and $ox$ is the oxidation insulation factor (dimensionless, 0–0.8).
+where $T_{material}$ is the material core temperature ( ^\circ C), $r$ is the precipitate radius (nm), and $ox$ is the oxidation insulation factor (dimensionless, 0-0.8).
 
 ---
 
@@ -12,14 +12,14 @@ where $T_{material}$ is the material core temperature (°C), $r$ is the precipit
 
 The furnace air temperature ($T_{furnace}$) changes **instantaneously** when the agent selects a temperature action, plus Gaussian noise $\mathcal{N}(0, \sigma_T)$. But the material's core temperature follows Newton's Law of Cooling:
 
-$$\frac{dT_{material}}{dt} = \frac{h_{eff}(t) \cdot A_{surface}}{m \cdot C_p} \cdot \left(T_{furnace} - T_{material}\right)$$
+$$\frac{dT_{material}}{dt} = \frac{h_{eff}(t)   A_{surface}}{m   C_p}   (T_{furnace} - T_{material})$$
 
 | Symbol | Meaning | Source |
 |--------|---------|--------|
 | $h_{eff}(t)$ | Effective heat transfer coefficient (W/m²·K) | `base_h × (1 − ox)` — decays with oxidation |
 | $A_{surface}$ | Billet surface area: $2\pi r_b(r_b + h_b)$ (m²) | Computed from `hardware.json` geometry |
-| $m$ | Mass: $\rho \cdot \pi r_b^2 h_b$ (kg) | `density_g_cm3` × 1000 × volume |
-| $C_p$ | Specific heat capacity (J/kg·K) | `materials.json` → `specific_heat_capacity` |
+| $m$ | Mass: $\rho   \pi r_b^2 h_b$ (kg) | `density_g_cm3` × 1000 × volume |
+| $C_p$ | Specific heat capacity (J/kg·K) | `materials.json` -> `specific_heat_capacity` |
 
 ### Why This Matters
 
@@ -31,13 +31,13 @@ Consider `Ti_6Al_4V` ($\rho = 4.43\text{ g/cm}^3$, $C_p = 526\text{ J/kg·K}$) a
 
 | Property | `lab_scale` (1cm × 5cm) | `massive_casting` (50cm × 200cm) |
 |----------|-------------------------|----------------------------------|
-| Volume | $\pi \cdot 0.01^2 \cdot 0.05 = 1.57 \times 10^{-5}\text{ m}^3$ | $\pi \cdot 0.5^2 \cdot 2.0 = 1.571\text{ m}^3$ |
+| Volume | $\pi   0.01^2   0.05 = 1.57 \times 10^{-5}\text{ m}^3$ | $\pi   0.5^2   2.0 = 1.571\text{ m}^3$ |
 | Mass | $0.070\text{ kg}$ | $6{,}959\text{ kg}$ |
 | Surface area | $0.00377\text{ m}^2$ | $7.854\text{ m}^2$ |
-| $h_{eff} \cdot A / (m \cdot C_p)$ | $\approx 2.56\text{ s}^{-1}$ | $\approx 1.61 \times 10^{-4}\text{ s}^{-1}$ |
+| $h_{eff}   A / (m   C_p)$ | $\approx 2.56\text{ s}^{-1}$ | $\approx 1.61 \times 10^{-4}\text{ s}^{-1}$ |
 | **Thermal time constant** | **~0.4 s** (near-instant) | **~1.7 hours** (extremely sluggish) |
 
-The massive casting requires **~15,000× longer** to equilibrate. This is why the `hard-bake` task (Ti-6Al-4V + massive_casting) demands aggressive predictive braking.
+The massive casting requires ~15,000× longer to equilibrate. This is why the `hard-bake` task (Ti-6Al-4V + massive_casting) demands aggressive predictive braking.
 
 ---
 
@@ -45,19 +45,19 @@ The massive casting requires **~15,000× longer** to equilibrate. This is why th
 
 As the material heats, a surface oxide layer builds up, reducing the effective heat transfer coefficient and acting as a thermal insulator. Oxidation follows Arrhenius kinetics:
 
-$$\frac{d(ox)}{dt} = A_{ox} \cdot \exp\left(-\frac{E_{ox}}{R \cdot (T_{material} + 273.15)}\right) \cdot (0.8 - ox)$$
+$$\frac{d(ox)}{dt} = A_{ox}   \exp\left(-\frac{E_{ox}}{R   (T_{material} + 273.15)}\right)   (0.8 - ox)$$
 
 | Symbol | Meaning | Source |
 |--------|---------|--------|
-| $A_{ox}$ | Pre-exponential factor for oxidation (1/s) | `materials.json` → `A_ox` |
-| $E_{ox}$ | Activation energy for oxidation (J/mol) | `materials.json` → `E_ox` |
+| $A_{ox}$ | Pre-exponential factor for oxidation (1/s) | `materials.json` -> `A_ox` |
+| $E_{ox}$ | Activation energy for oxidation (J/mol) | `materials.json` -> `E_ox` |
 | $R$ | Universal gas constant = 8.314 J/(mol·K) | Constant |
-| $(0.8 - ox)$ | Saturation term — caps insulation at **80%** | — |
+| $(0.8 - ox)$ | Saturation term — caps insulation at 80% | — |
 
 ### Saturation Behavior
 
 - The $(0.8 - ox)$ term acts as a self-limiting brake. As the oxide layer thickens, its growth rate slows asymptotically toward zero.
-- The effective heat transfer coefficient becomes: $h_{eff} = base\_h \cdot (1.0 - ox)$
+- The effective heat transfer coefficient becomes: $h_{eff} = base\_h   (1.0 - ox)$
 - At maximum oxidation ($ox = 0.8$), only 20% of the original heat transfer remains. The material becomes increasingly difficult to heat *or* cool.
 
 ### Alloy Sensitivity
@@ -77,12 +77,12 @@ Different alloys oxidize at vastly different rates:
 
 The base reaction rate $k(T)$ for precipitate growth is driven by the Arrhenius equation:
 
-$$k(T) = A \cdot \exp\left(-\frac{E}{R \cdot (T_{material} + 273.15)}\right)$$
+$$k(T) = A   \exp\left(-\frac{E}{R   (T_{material} + 273.15)}\right)$$
 
 | Symbol | Meaning | Source |
 |--------|---------|--------|
-| $A$ | Pre-exponential factor (reactions/s) | `materials.json` → `A` |
-| $E$ | Activation energy (J/mol) | `materials.json` → `E` |
+| $A$ | Pre-exponential factor (reactions/s) | `materials.json` -> `A` |
+| $E$ | Activation energy (J/mol) | `materials.json` -> `E` |
 
 ### Phase-Dependent Growth Rate
 
@@ -90,10 +90,10 @@ The actual growth rate $dr/dt$ depends on the current thermal regime, defined re
 
 | Phase | Temperature Range | Growth Rate ($dr/dt$) | Physics |
 |-------|-------------------|----------------------|---------|
-| **Frozen** | $T < 0.35 \cdot T_{melt}$ | $0$ | Atomic diffusion is negligible. Material remains in initial microstructure. |
-| **Controlled Growth** | $0.35 \cdot T_{melt} \leq T \leq 0.68 \cdot T_{melt}$ | $k(T) \cdot \left(1 - \dfrac{r}{R_{max}}\right)$ | Diffusion-controlled growth. **The sweet spot.** |
-| **Ostwald Ripening** | $0.68 \cdot T_{melt} < T \leq T_{melt}$ | $k(T) \cdot \dfrac{r}{R_{max}} \cdot \left(1 - \dfrac{r}{R_{max}}\right)$ | Grain coarsening with saturation cap. **Failure mode.** |
-| **Melting** | $T > T_{melt}$ | $0$ | Crystalline structure dissolves. Episode terminates catastrophically. |
+| **Frozen** | $T < 0.35T_{melt}$ | $0$ | Atomic diffusion is negligible. |
+| **Controlled Growth** | $0.35T_{melt} \leq T \leq 0.68T_{melt}$ | $k(T)(1 - r/R_{max})$ | Diffusion-controlled growth. |
+| **Ostwald Ripening** | $0.68T_{melt} < T \leq T_{melt}$ | $k(T)(r/R_{max})(1 - r/R_{max})$ | Grain coarsening. Failure mode. |
+| **Melting** | $T > T_{melt}$ | $0$ | Crystalline structure dissolves. |
 
 Where $R_{max}$ = `alloy.r_max_clip` — the physical ceiling radius for the alloy.
 
@@ -110,12 +110,12 @@ This allows the agent to "park" the precipitate radius at the target by holding 
 
 ### Phase Thresholds by Alloy
 
-| Alloy | $T_{melt}$ | Frozen ($< 0.35T_m$) | Growth ($0.35–0.68T_m$) | Ripening ($0.68–1.0T_m$) |
+| Alloy | $T_{melt}$ | Frozen ($< 0.35T_m$) | Growth ($0.35-0.68T_m$) | Ripening ($0.68-1.0T_m$) |
 |-------|------------|----------------------|-------------------------|--------------------------|
-| Al-2024 | 502 °C | < 176 °C | 176–341 °C | 341–502 °C |
-| Steel 1095 | 1400 °C | < 490 °C | 490–952 °C | 952–1400 °C |
-| Ti-6Al-4V | 1600 °C | < 560 °C | 560–1088 °C | 1088–1600 °C |
-| Inconel 718 | 1336 °C | < 468 °C | 468–909 °C | 909–1336 °C |
+| Al-2024 | 502  ^\circ C | < 176  ^\circ C | 176-341  ^\circ C | 341-502  ^\circ C |
+| Steel 1095 | 1400  ^\circ C | < 490  ^\circ C | 490-952  ^\circ C | 952-1400  ^\circ C |
+| Ti-6Al-4V | 1600  ^\circ C | < 560  ^\circ C | 560-1088  ^\circ C | 1088-1600  ^\circ C |
+| Inconel 718 | 1336  ^\circ C | < 468  ^\circ C | 468-909  ^\circ C | 909-1336  ^\circ C |
 
 ---
 
@@ -127,26 +127,26 @@ The reward function shapes the agent's policy toward precision, efficiency, and 
 
 At every step with duration $\Delta t$ seconds:
 
-$$R_{step} = \underbrace{-0.1 \cdot |r - r_{target}| - 0.01 \cdot (r - r_{target})^2}_{\text{proximity shaping}} - \underbrace{0.001 \cdot T_{material} \cdot \frac{\Delta t}{3600}}_{\text{energy penalty}} - \underbrace{0.00028 \cdot \Delta t}_{\text{time penalty}}$$
+$$R_{step} = -0.1   |r - r_{target}| - 0.01   (r - r_{target})^2 - 0.001   T_{material}   \frac{\Delta t}{3600} - 0.00028   \Delta t$$
 
-Additionally, if $T_{material}$ exceeds $T_{melt} - 100$°C:
+Additionally, if $T_{material}$ exceeds $T_{melt} - 100$ ^\circ C:
 
-$$R_{step} \mathrel{-}= (T_{material} - T_{warning}) \cdot 0.05 \cdot \frac{\Delta t}{3600}$$
+$$R_{step} -= (T_{material} - T_{warning})   0.05   \frac{\Delta t}{3600}$$
 
 ### Terminal Rewards
 
 | Condition | Reward |
 |-----------|--------|
-| **Success** ($r_{min} \leq r \leq r_{max}$) | $+100 + 100 \cdot \exp\left(-\frac{(r - r_{target})^2}{10}\right)$ |
+| **Success** ($r_{min} \leq r \leq r_{max}$) | $+100 + 100   \exp\left(-\frac{(r - r_{target})^2}{10}\right)$ |
 | **Over-coarsened** ($r > r_{max}$) | $-100$ |
 | **Melted** ($T \geq T_{melt}$) | $-200$ |
 | **Timed out / Other** | $-50$ |
 
 ### Warning Temperature Thresholds
 
-The per-step penalty intensifies when $T_{material}$ exceeds $T_{melt} - 100$°C. Computed per alloy:
+The per-step penalty intensifies when $T_{material}$ exceeds $T_{melt} - 100$ ^\circ C. Computed per alloy:
 
-| Alloy | $T_{melt}$ (°C) | $T_{warning}$ (°C) | Penalty kicks in at |
+| Alloy | $T_{melt}$ ( ^\circ C) | $T_{warning}$ ( ^\circ C) | Penalty kicks in at |
 |-------|-----------------|---------------------|---------------------|
 | Al-2024 | 502 | 402 | 80% of $T_{melt}$ |
 | Mg AZ31B | 630 | 530 | 84% of $T_{melt}$ |
@@ -200,9 +200,9 @@ $$T_{furnace} \leftarrow \text{clip}\left(T_{furnace} + dT_{action} + \mathcal{N
 
 | `AgentGrade` | $\sigma_T$ |
 |--------------|-----------|
-| EASY | 1 °C |
-| MEDIUM | 2 °C |
-| HARD | 3 °C |
+| EASY | 1  ^\circ C |
+| MEDIUM | 2  ^\circ C |
+| HARD | 3  ^\circ C |
 
 This noise simulates real-world furnace variability (thermocouple drift, convection turbulence, draft effects).
 
