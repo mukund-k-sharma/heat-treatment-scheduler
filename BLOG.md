@@ -11,7 +11,7 @@ We built a **continuous physics digital twin** of an industrial precipitation ha
 
 The environment is powered by three coupled Ordinary Differential Equations (ODEs) solved in real-time via SciPy, not a lookup table or a game engine. The LLM doesn't see pixels or tokens — it reads normalized telemetry and outputs `[action, duration]` pairs that are integrated through continuous physics.
 
-**Links:** [HF Space](https://huggingface.co/spaces/mukundnjoy/heat-treatment-scheduler) · [Training Notebook](https://colab.research.google.com/drive/1mdsMleIwfpBrLe2Csb2GTmKqZXQbGjC3?usp=sharing) · [Presentation Deck](https://docs.google.com/presentation/d/1ZHcN1Glm7zaK1rs2FiZDN-AXNNFXhR61vBk14T-eZh8/edit?usp=sharing) · [WandB Dashboard](https://wandb.ai/mukundnjoy-paypal/heat-treatment-grpo?nw=nwusermukundnjoy)
+**Links:** [HF Space](https://huggingface.co/spaces/mukundnjoy/heat-treatment-scheduler) · [Training Notebook](https://huggingface.co/spaces/mukundnjoy/TRL-heat-treatment-scheduler) · [Presentation Deck](https://docs.google.com/presentation/d/1ZHcN1Glm7zaK1rs2FiZDN-AXNNFXhR61vBk14T-eZh8/edit?usp=sharing) · [WandB Dashboard](https://wandb.ai/mukundnjoy-paypal/heat-treatment-grpo?nw=nwusermukundnjoy)
 
 ---
 

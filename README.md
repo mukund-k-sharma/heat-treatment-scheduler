@@ -19,7 +19,7 @@ tags:
 # 🏭 Continuous Heat Treatment Digital Twin: Predictive Braking with GRPO
 
 **Hugging Face Space:** [heat-treatment-scheduler](https://huggingface.co/spaces/mukundnjoy/heat-treatment-scheduler)  
-**Training Notebook (Colab):** [TRL.ipynb](https://colab.research.google.com/drive/1mdsMleIwfpBrLe2Csb2GTmKqZXQbGjC3?usp=sharing)  
+**Training Notebook (HF Space):** [TRL-heat-treatment-scheduler](https://huggingface.co/spaces/mukundnjoy/TRL-heat-treatment-scheduler)  
 **Presentation Deck:** [Heat Treatment Scheduler - Digital Twin (V2)](https://docs.google.com/presentation/d/1ZHcN1Glm7zaK1rs2FiZDN-AXNNFXhR61vBk14T-eZh8/edit?usp=sharing)  
 **WandB Training Dashboard:** [heat-treatment-grpo](https://wandb.ai/mukundnjoy-paypal/heat-treatment-grpo?nw=nwusermukundnjoy)  
 **Technical Blog:** [BLOG.md](BLOG.md)
