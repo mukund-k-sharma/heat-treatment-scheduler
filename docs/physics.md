@@ -12,14 +12,14 @@ where $T_{\text{mat}}$ is the material core temperature (°C), $r$ is the precip
 
 The furnace air temperature ($T_{furnace}$) changes **instantaneously** when the agent selects a temperature action, plus Gaussian noise $\mathcal{N}(0, \sigma_T)$. But the material's core temperature follows Newton's Law of Cooling:
 
-$$\frac{dT_{\text{mat}}}{dt} = \frac{h_{eff}(t) \cdot A_{surface}}{m \cdot C_p} \cdot (T_{furnace} - T_{\text{mat}})$$
+$$\frac{dT_{\text{mat}}}{dt} = \frac{h_{eff}(t) A_{surface}}{m C_p} (T_{furnace} - T_{\text{mat}})$$
 
 | Symbol | Meaning | Source |
 |--------|---------|--------|
-| $h_{eff}(t)$ | Effective heat transfer coefficient (W/m²·K) | `base_h × (1 − ox)` — decays with oxidation |
+| $h_{eff}(t)$ | Effective heat transfer coefficient (W/m² K) | `base_h × (1 − ox)` — decays with oxidation |
 | $A_{surface}$ | Billet surface area: $2\pi r_b(r_b + h_b)$ (m²) | Computed from `hardware.json` geometry |
-| $m$ | Mass: $\rho \cdot \pi r_b^2 h_b$ (kg) | `density_g_cm3` × 1000 × volume |
-| $C_p$ | Specific heat capacity (J/kg·K) | `materials.json` -> `specific_heat_capacity` |
+| $m$ | Mass: $\rho \pi r_b^2 h_b$ (kg) | `density_g_cm3` × 1000 × volume |
+| $C_p$ | Specific heat capacity (J/kg K) | `materials.json` -> `specific_heat_capacity` |
 
 ### Why This Matters
 
@@ -27,14 +27,14 @@ This ODE creates **thermal inertia** (lag). A massive casting ($50\text{cm} \tim
 
 ### Worked Example: Thermal Mass Comparison
 
-Consider `Ti_6Al_4V` ($\rho = 4.43\text{ g/cm}^3$, $C_p = 526\text{ J/kg·K}$) across two hardware setups:
+Consider `Ti_6Al_4V` ($\rho = 4.43\text{ g/cm}^3$, $C_p = 526\text{ J/kg K}$) across two hardware setups:
 
 | Property | `lab_scale` (1cm × 5cm) | `massive_casting` (50cm × 200cm) |
 |----------|-------------------------|----------------------------------|
-| Volume | $\pi \cdot 0.01^2 \cdot 0.05 = 1.57 \times 10^{-5}\text{ m}^3$ | $\pi \cdot 0.5^2 \cdot 2.0 = 1.571\text{ m}^3$ |
+| Volume | $\pi 0.01^2 0.05 = 1.57 \times 10^{-5}\text{ m}^3$ | $\pi 0.5^2 2.0 = 1.571\text{ m}^3$ |
 | Mass | $0.070\text{ kg}$ | $6{,}959\text{ kg}$ |
 | Surface area | $0.00377\text{ m}^2$ | $7.854\text{ m}^2$ |
-| $h_{eff} \cdot A / (m \cdot C_p)$ | $\approx 2.56\text{ s}^{-1}$ | $\approx 1.61 \times 10^{-4}\text{ s}^{-1}$ |
+| $h_{eff} A / (m C_p)$ | $\approx 2.56\text{ s}^{-1}$ | $\approx 1.61 \times 10^{-4}\text{ s}^{-1}$ |
 | **Thermal time constant** | **~0.4 s** (near-instant) | **~1.7 hours** (extremely sluggish) |
 
 The massive casting requires ~15,000× longer to equilibrate. This is why the `hard-bake` task (Ti-6Al-4V + massive_casting) demands aggressive predictive braking.
@@ -45,19 +45,19 @@ The massive casting requires ~15,000× longer to equilibrate. This is why the `h
 
 As the material heats, a surface oxide layer builds up, reducing the effective heat transfer coefficient and acting as a thermal insulator. Oxidation follows Arrhenius kinetics:
 
-$$\frac{d(ox)}{dt} = A_{ox} \cdot \exp\left(-\frac{E_{ox}}{R \cdot (T_{\text{mat}} + 273.15)}\right) \cdot (0.8 - ox)$$
+$$\frac{d(ox)}{dt} = A_{ox} \exp\left(-\frac{E_{ox}}{R (T_{\text{mat}} + 273.15)}\right) (0.8 - ox)$$
 
 | Symbol | Meaning | Source |
 |--------|---------|--------|
 | $A_{ox}$ | Pre-exponential factor for oxidation (1/s) | `materials.json` -> `A_ox` |
 | $E_{ox}$ | Activation energy for oxidation (J/mol) | `materials.json` -> `E_ox` |
-| $R$ | Universal gas constant = 8.314 J/(mol·K) | Constant |
+| $R$ | Universal gas constant = 8.314 J/(mol K) | Constant |
 | $(0.8 - ox)$ | Saturation term — caps insulation at 80% | — |
 
 ### Saturation Behavior
 
 - The $(0.8 - ox)$ term acts as a self-limiting brake. As the oxide layer thickens, its growth rate slows asymptotically toward zero.
-- The effective heat transfer coefficient becomes: $h_{eff} = base\_h \cdot (1.0 - ox)$
+- The effective heat transfer coefficient becomes: $h_{eff} = base\_h (1.0 - ox)$
 - At maximum oxidation ($ox = 0.8$), only 20% of the original heat transfer remains. The material becomes increasingly difficult to heat *or* cool.
 
 ### Alloy Sensitivity
@@ -77,7 +77,7 @@ Different alloys oxidize at vastly different rates:
 
 The base reaction rate $k(T)$ for precipitate growth is driven by the Arrhenius equation:
 
-$$k(T) = A \cdot \exp\left(-\frac{E}{R \cdot (T_{\text{mat}} + 273.15)}\right)$$
+$$k(T) = A \exp\left(-\frac{E}{R (T_{\text{mat}} + 273.15)}\right)$$
 
 | Symbol | Meaning | Source |
 |--------|---------|--------|
@@ -127,17 +127,17 @@ The reward function shapes the agent's policy toward precision, efficiency, and 
 
 At every step with duration $\Delta t$ seconds:
 
-$$R_{step} = -0.1 \cdot |r - r_{target}| - 0.01 \cdot (r - r_{target})^2 - 0.001 \cdot T_{\text{mat}} \cdot \frac{\Delta t}{3600} - 0.00028 \cdot \Delta t$$
+$$R_{step} = -0.1 |r - r_{target}| - 0.01 (r - r_{target})^2 - 0.001 T_{\text{mat}} \frac{\Delta t}{3600} - 0.00028 \Delta t$$
 
 Additionally, if $T_{\text{mat}}$ exceeds $T_{\text{melt}} - 100$°C:
 
-$$R_{step} -= (T_{\text{mat}} - T_{warning}) \cdot 0.05 \cdot \frac{\Delta t}{3600}$$
+$$R_{step} -= (T_{\text{mat}} - T_{warning}) 0.05 \frac{\Delta t}{3600}$$
 
 ### Terminal Rewards
 
 | Condition | Reward |
 |-----------|--------|
-| **Success** ($r_{min} \leq r \leq r_{max}$) | $+100 + 100 \cdot \exp\left(-\frac{(r - r_{target})^2}{10}\right)$ |
+| **Success** ($r_{min} \leq r \leq r_{max}$) | $+100 + 100 \exp\left(-\frac{(r - r_{target})^2}{10}\right)$ |
 | **Over-coarsened** ($r > r_{max}$) | $-100$ |
 | **Melted** ($T \geq T_{\text{melt}}$) | $-200$ |
 | **Timed out / Other** | $-50$ |
@@ -172,11 +172,11 @@ The three coupled ODEs are solved together by `scipy.integrate.solve_ivp`:
 
 ```python
 solution = solve_ivp(
- \cdot  fun=self._physics_derivatives, \cdot  # [dT/dt, dr/dt, d(ox)/dt]
- \cdot  t_span=(t_current, t_current + duration_sec),
- \cdot  y0=[T_material, radius, oxidation_factor],
- \cdot  method='RK45', \cdot  \cdot  \cdot  \cdot  \cdot  \cdot   # Explicit Runge-Kutta order 5(4)
- \cdot  max_step=120 \cdot  \cdot  \cdot  \cdot  \cdot  \cdot  \cdot  # Evaluate every 2 simulated minutes
+ fun=self._physics_derivatives, # [dT/dt, dr/dt, d(ox)/dt]
+ t_span=(t_current, t_current + duration_sec),
+ y0=[T_material, radius, oxidation_factor],
+ method='RK45', # Explicit Runge-Kutta order 5(4)
+ max_step=120 # Evaluate every 2 simulated minutes
 )
 ```
 
@@ -212,13 +212,13 @@ This noise simulates real-world furnace variability (thermocouple drift, convect
 
 ```mermaid
 graph TD
- \cdot  A["Agent Action<br/>(ΔT_furnace, duration)"] -->|Instant + Noise| B["T_furnace"]
- \cdot  B -->|Newton's Cooling| C["T_material (ODE 1)"]
- \cdot  C -->|Arrhenius| D["Oxidation ox (ODE 3)"]
- \cdot  D -->|Reduces h_eff| B
- \cdot  C -->|Phase-dependent<br/>Arrhenius| E["Precipitate r (ODE 2)"]
- \cdot  E -->|Proximity reward| F["Reward Signal"]
- \cdot  C -->|Melt/Overshoot<br/>penalties| F
+ A["Agent Action<br/>(ΔT_furnace, duration)"] -->|Instant + Noise| B["T_furnace"]
+ B -->|Newton's Cooling| C["T_material (ODE 1)"]
+ C -->|Arrhenius| D["Oxidation ox (ODE 3)"]
+ D -->|Reduces h_eff| B
+ C -->|Phase-dependent<br/>Arrhenius| E["Precipitate r (ODE 2)"]
+ E -->|Proximity reward| F["Reward Signal"]
+ C -->|Melt/Overshoot<br/>penalties| F
 ```
 
 The key insight is the **feedback loop**: oxidation reduces heat transfer, which affects temperature evolution, which in turn affects both oxidation rate and precipitate growth. This creates complex, non-linear dynamics that require predictive multi-step planning rather than greedy single-step optimization.
